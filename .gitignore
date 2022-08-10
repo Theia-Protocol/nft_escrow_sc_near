@@ -1,0 +1,6 @@
+#cargo
+/neardev
+/target
+
+#editor
+.idea
