@@ -1,6 +1,6 @@
-use near_contract_standards::non_fungible_token::metadata::{NFTContractMetadata, TokenMetadata, NFT_METADATA_SPEC, NonFungibleTokenMetadataProvider};
-use near_contract_standards::non_fungible_token::{Token, TokenId};
-use near_contract_standards::non_fungible_token::NonFungibleToken;
+use crate::multi_token::metadata::{MtContractMetadata, TokenMetadata, MT_METADATA_SPEC, MultiTokenMetadataProvider};
+use crate::multi_token::token::{Token, TokenId};
+use crate::multi_token::core::MultiToken;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::LazyOption;
 use near_sdk::{
@@ -9,18 +9,17 @@ use near_sdk::{
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
-pub struct NftCollection {
-    tokens: NonFungibleToken,
-    metadata: LazyOption<NFTContractMetadata>,
-    current_index: u128,
+pub struct ProxyMt {
+    tokens: MultiToken,
+    metadata: LazyOption<MtContractMetadata>,
     max_supply: u128,
-    json_base_uri: String,
+    blank_media_uri: String,
     description: String,
 }
 
 #[derive(BorshSerialize, BorshStorageKey)]
 enum StorageKey {
-    NonFungibleToken,
+    MultiToken,
     Metadata,
     TokenMetadata,
     Enumeration,
@@ -28,13 +27,13 @@ enum StorageKey {
 }
 
 #[near_bindgen]
-impl NftCollection {
+impl ProxyMt {
     /// Initializes the contract owned by `owner_id` with nft metadata
     #[init]
-    pub fn new(owner_id: AccountId, name: String, symbol: String, media_base_uri: String, max_supply: u128, json_base_uri: String, description: String ) -> Self {
+    pub fn new(owner_id: AccountId, name: String, symbol: String, blank_media_uri: String, max_supply: u128, description: String ) -> Self {
         assert!(!env::state_exists(), "Already initialized");
-        let metadata = NFTContractMetadata {
-            spec: NFT_METADATA_SPEC.to_string(),
+        let metadata = MtContractMetadata {
+            spec: MT_METADATA_SPEC.to_string(),
             name,
             symbol,
             icon: None,
@@ -44,17 +43,16 @@ impl NftCollection {
         };
 
         Self {
-            tokens: NonFungibleToken::new(
-                StorageKey::NonFungibleToken,
+            tokens: MultiToken::new(
+                StorageKey::MultiToken,
                 owner_id,
                 Some(StorageKey::TokenMetadata),
                 Some(StorageKey::Enumeration),
                 Some(StorageKey::Approval),
             ),
             metadata: LazyOption::new(StorageKey::Metadata, Some(&metadata)),
-            current_index: 0u128,
             max_supply,
-            json_base_uri,
+            blank_media_uri,
             description,
         }
     }
@@ -68,7 +66,7 @@ impl NftCollection {
         amount: u128,
     ) -> Vec<Token> {
         assert!(amount > 0, "Invalid amount");
-        assert!(self.current_index.checked_add(amount).unwrap() < self.max_supply, "OverMaxSupply");
+        assert!(self.current_index + amount < self.max_supply, "OverMaxSupply");
         assert_eq!(env::predecessor_account_id(), self.tokens.owner_id, "Unauthorized");
 
         let mut tokens: Vec<Token> = vec![];
@@ -78,30 +76,20 @@ impl NftCollection {
             let mut title = "#".to_string();
             title.push_str(&i.to_string());
 
-            let mut media_uri: String = self.metadata.get().unwrap().base_uri.unwrap().clone();
-            media_uri.push_str(&i.to_string());
-            media_uri.push_str(".json");
-
-            let mut json_uri = self.json_base_uri.clone();
-            json_uri.push_str(&i.to_string());
-            json_uri.push_str(".json");
-
-            let token_id: TokenId = (self.current_index + i).to_string();
             let token_metadata = TokenMetadata {
                 title: Some(title),
                 description: Some(self.description.clone()),
-                media: Some(media_uri),
+                media: Some(self.blank_media_uri.clone()),
                 media_hash: None,
-                copies: None,
                 issued_at: None,
                 expires_at: None,
                 starts_at: None,
                 updated_at: None,
                 extra: None,
-                reference: Some(json_uri),
+                reference: None,
                 reference_hash: None
             };
-            let token: Token = self.tokens.internal_mint(token_id.to_string(), receiver_id.clone(), Some(token_metadata));
+            let token: Token = self.tokens.internal_mint(receiver_id.clone(), Some(1), Some(token_metadata), None);
             tokens.push(token);
             i += 1;
         }
@@ -110,13 +98,13 @@ impl NftCollection {
     }
 }
 
-near_contract_standards::impl_non_fungible_token_core!(NftCollection, tokens);
-near_contract_standards::impl_non_fungible_token_approval!(NftCollection, tokens);
-near_contract_standards::impl_non_fungible_token_enumeration!(NftCollection, tokens);
+crate::multi_token::impl_multi_token_core!(ProxyMt, tokens);
+crate::multi_token::impl_multi_token_approval!(ProxyMt, tokens);
+crate::multi_token::impl_multi_token_enumeration!(ProxyMt, tokens);
 
 #[near_bindgen]
-impl NonFungibleTokenMetadataProvider for NftCollection {
-    fn nft_metadata(&self) -> NFTContractMetadata {
+impl MultiTokenMetadataProvider for ProxyMt {
+    fn mt_metadata(&self) -> MtContractMetadata {
         self.metadata.get().unwrap()
     }
 }
