@@ -13,7 +13,7 @@ use near_sdk::{
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
-pub struct NEFungibleToken {
+pub struct Contract {
     token: FungibleToken,
     metadata: LazyOption<FungibleTokenMetadata>,
     owner_id: AccountId,
@@ -26,7 +26,7 @@ enum StorageKey {
 }
 
 #[near_bindgen]
-impl NEFungibleToken {
+impl Contract {
     /// Initializes the contract with the given total supply owned by the given `owner_id` with
     /// the given fungible token metadata.
     #[init]
@@ -73,11 +73,11 @@ impl NEFungibleToken {
     }
 }
 
-near_contract_standards::impl_fungible_token_core!(NEFungibleToken, token, on_tokens_burned);
-near_contract_standards::impl_fungible_token_storage!(NEFungibleToken, token, on_account_closed);
+near_contract_standards::impl_fungible_token_core!(Contract, token, on_tokens_burned);
+near_contract_standards::impl_fungible_token_storage!(Contract, token, on_account_closed);
 
 #[near_bindgen]
-impl FungibleTokenMetadataProvider for NEFungibleToken {
+impl FungibleTokenMetadataProvider for Contract {
     fn ft_metadata(&self) -> FungibleTokenMetadata {
         self.metadata.get().unwrap()
     }

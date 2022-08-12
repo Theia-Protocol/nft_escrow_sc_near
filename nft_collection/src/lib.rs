@@ -9,7 +9,7 @@ use near_sdk::{
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
-pub struct NftCollection {
+pub struct Contract {
     tokens: NonFungibleToken,
     metadata: LazyOption<NFTContractMetadata>,
     current_index: u128,
@@ -28,7 +28,7 @@ enum StorageKey {
 }
 
 #[near_bindgen]
-impl NftCollection {
+impl Contract {
     /// Initializes the contract owned by `owner_id` with nft metadata
     #[init]
     pub fn new(owner_id: AccountId, name: String, symbol: String, media_base_uri: String, max_supply: u128, json_base_uri: String, description: String ) -> Self {
@@ -110,12 +110,12 @@ impl NftCollection {
     }
 }
 
-near_contract_standards::impl_non_fungible_token_core!(NftCollection, tokens);
-near_contract_standards::impl_non_fungible_token_approval!(NftCollection, tokens);
-near_contract_standards::impl_non_fungible_token_enumeration!(NftCollection, tokens);
+near_contract_standards::impl_non_fungible_token_core!(Contract, tokens);
+near_contract_standards::impl_non_fungible_token_approval!(Contract, tokens);
+near_contract_standards::impl_non_fungible_token_enumeration!(Contract, tokens);
 
 #[near_bindgen]
-impl NonFungibleTokenMetadataProvider for NftCollection {
+impl NonFungibleTokenMetadataProvider for Contract {
     fn nft_metadata(&self) -> NFTContractMetadata {
         self.metadata.get().unwrap()
     }
