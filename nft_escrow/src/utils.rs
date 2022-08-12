@@ -1,3 +1,10 @@
+use near_sdk::{ext_contract, AccountId};
+
+#[ext_contract(ext_self)]
+pub trait SelfCallbacks {
+    fn active_project_callback(&mut self, token_id: AccountId);
+}
+
 /// Newton's method of integer square root.
 pub fn integer_sqrt(value: U256) -> U256 {
     let mut guess: U256 = (value + U256::one()) >> 1;
