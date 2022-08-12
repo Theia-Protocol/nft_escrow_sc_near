@@ -1,8 +1,5 @@
-mod nft_collection;
-mod proxy_mt;
 
-// pub use nft_collection::*;
-pub use proxy_mt::*;
+
 
 #[allow(dead_code, unused)]
 #[cfg(test)]
