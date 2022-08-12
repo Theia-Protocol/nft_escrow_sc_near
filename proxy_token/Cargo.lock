@@ -294,41 +294,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "darling"
-version = "0.14.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4529658bdda7fd6769b8614be250cdcfc3aeb0ee72fe66f9e41e5e5eb73eac02"
-dependencies = [
- "darling_core",
- "darling_macro",
-]
-
-[[package]]
-name = "darling_core"
-version = "0.14.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "649c91bc01e8b1eac09fb91e8dbc7d517684ca6be8ebc75bb9cafc894f9fdb6f"
-dependencies = [
- "fnv",
- "ident_case",
- "proc-macro2",
- "quote",
- "strsim",
- "syn",
-]
-
-[[package]]
-name = "darling_macro"
-version = "0.14.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddfc69c5bfcbd2fc09a0f38451d2daf0e372e367986a83906d1b0dbc88134fb5"
-dependencies = [
- "darling_core",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "derive_more"
 version = "0.99.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -399,21 +364,6 @@ dependencies = [
  "rand 0.8.5",
  "rustc-hex",
  "static_assertions",
-]
-
-[[package]]
-name = "fnv"
-version = "1.0.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
-
-[[package]]
-name = "ft_token"
-version = "0.1.0"
-dependencies = [
- "near-contract-standards",
- "near-contract-tools",
- "near-sdk",
 ]
 
 [[package]]
@@ -489,12 +439,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ident_case"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
-
-[[package]]
 name = "impl-codec"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -537,9 +481,9 @@ checksum = "f9b7d56ba4a8344d6be9729995e6b06f928af29998cdf79fe390cbf6b1fee838"
 
 [[package]]
 name = "libc"
-version = "0.2.131"
+version = "0.2.129"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04c3b4822ccebfa39c02fc03d1534441b22ead323fa0f48bb7ddd8e6ba076a40"
+checksum = "64de3cc433455c14174d42e554d4027ee631c4d046d43e3ecc6efc4636cdc7a7"
 
 [[package]]
 name = "log"
@@ -575,30 +519,6 @@ dependencies = [
  "near-sdk",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "near-contract-tools"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "100c47bee984cd95797a00a288fd6caeb4efde36901cf4e60089f2bfef3f3bfc"
-dependencies = [
- "near-contract-tools-macros",
- "near-sdk",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "near-contract-tools-macros"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7d9d91e0b0da832f4a4e2b1a7a440cdbe37357186f6d2f6969a9f3710ff4896"
-dependencies = [
- "darling",
- "heck",
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -765,26 +685,6 @@ dependencies = [
  "serde",
  "sha2 0.10.2",
  "sha3",
-]
-
-[[package]]
-name = "nft_collection"
-version = "0.1.0"
-dependencies = [
- "near-contract-standards",
- "near-contract-tools",
- "near-sdk",
-]
-
-[[package]]
-name = "nft_escrow_sc"
-version = "0.1.0"
-dependencies = [
- "near-contract-standards",
- "near-contract-tools",
- "near-sdk",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -1166,12 +1066,6 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
-
-[[package]]
-name = "strsim"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 
 [[package]]
 name = "strum"

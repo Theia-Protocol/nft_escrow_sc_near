@@ -1,18 +1,10 @@
-[package]
-name = "nft_escrow_sc"
-version = "0.1.0"
-edition = "2021"
-authors = ["hosokawa"]
-
-[dependencies]
-near-sdk = "4.0.0"
-near-contract-standards = "4.0.0"
-near-contract-tools = "0.4.0"
-serde = "1"
-serde_json = "1"
-
-[lib]
-crate-type = ["cdylib"]
+[workspace]
+members = [
+    "./ft_token",
+    "./nft_collection",
+    "./proxy_token",
+    "./nft_escrow",
+]
 
 [profile.release]
 codegen-units = 1

@@ -768,26 +768,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nft_collection"
-version = "0.1.0"
-dependencies = [
- "near-contract-standards",
- "near-contract-tools",
- "near-sdk",
-]
-
-[[package]]
-name = "nft_escrow_sc"
-version = "0.1.0"
-dependencies = [
- "near-contract-standards",
- "near-contract-tools",
- "near-sdk",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "num-bigint"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -924,16 +904,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0a2ca2c61bc9f3d74d2886294ab7b9853abd9c1ad903a3ac7815c58989bb7bab"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "proxy_token"
-version = "0.1.0"
-dependencies = [
- "near-contract-standards",
- "near-sdk",
- "serde",
- "serde_json",
 ]
 
 [[package]]
