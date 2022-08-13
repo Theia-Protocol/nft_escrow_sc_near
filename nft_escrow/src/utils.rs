@@ -1,5 +1,8 @@
 use near_sdk::{ext_contract, AccountId};
 
+/// Fee divisor, allowing to provide fee in bps.
+pub const FEE_DIVISOR: u32 = 10_000;
+
 #[ext_contract(ext_self)]
 pub trait SelfCallbacks {
     fn active_project_callback(&mut self, token_id: AccountId);
