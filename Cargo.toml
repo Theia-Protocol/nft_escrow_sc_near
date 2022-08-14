@@ -1,9 +1,9 @@
 [workspace]
 members = [
+    "./nft_escrow",
     "./ft_token",
     "./nft_collection",
     "./proxy_token",
-    "./nft_escrow",
 ]
 
 [profile.release]

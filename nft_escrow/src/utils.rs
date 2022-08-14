@@ -9,8 +9,8 @@ pub trait SelfCallbacks {
 }
 
 /// Newton's method of integer square root.
-pub fn integer_sqrt(value: U256) -> U256 {
-    let mut guess: U256 = (value + U256::one()) >> 1;
+pub fn integer_sqrt(value: u128) -> u128 {
+    let mut guess: u128 = (value + 1) >> 1;
     let mut res = value;
     while guess < res {
         res = guess;
@@ -25,11 +25,11 @@ mod tests {
 
     #[test]
     fn test_sqrt() {
-        assert_eq!(integer_sqrt(U256::from(0)), 0.into());
-        assert_eq!(integer_sqrt(U256::from(4)), 2.into());
+        assert_eq!(integer_sqrt(0u128), 0.into());
+        assert_eq!(integer_sqrt(4u128), 2.into());
         assert_eq!(
-            integer_sqrt(U256::from(1_516_156_330_329u128)),
-            U256::from(1_231_323)
+            integer_sqrt(1_516_156_330_329u128),
+            1_231_323u128
         );
     }
 }

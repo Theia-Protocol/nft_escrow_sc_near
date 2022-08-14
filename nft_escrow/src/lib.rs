@@ -1,7 +1,6 @@
-use std::fs::OpenOptions;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::collections::{LazyOption, LookupMap, UnorderedMap};
-use near_sdk::{env, near_bindgen, AccountId, Balance, BorshStorageKey, PanicOnDefault, StorageUsage, Promise, Gas, PromiseError};
+use near_sdk::serde::{Deserialize, Serialize};
+use near_sdk::{env, near_bindgen, AccountId, Balance, PanicOnDefault, Promise, Gas};
 
 mod utils;
 mod errors;
@@ -57,9 +56,9 @@ pub struct Contract {
     /// Finder fee percent
     finder_fee: u32,
     /// Project token id
-    project_token_id: AccountId,
+    project_token_id: Option<AccountId>,
     /// Proxy token id
-    proxy_token_id: AccountId,
+    proxy_token_id: Option<AccountId>,
     /// Funding target amount
     fund_threshold: Balance,
     /// Start timestamp
@@ -89,21 +88,16 @@ pub struct Contract {
 const MIN_STORAGE: Balance = 1_100_000_000_000_000_000_000_000; //1.1Ⓝ
 const TGAS: u64 = 1_000_000_000_000;
 
-const PROXY_TOKEN_CODE: &[u8] = include_bytes!("./proxy_token/target/wasm32-unknown-unknown/release/proxy_token.wasm");
-const NFT_COLLECTION_CODE: &[u8] = include_bytes!("./nft_collection/target/wasm32-unknown-unknown/release/nft_collection.wasm");
-const FUNGIBLE_TOKEN_CODE: &[u8] = include_bytes!("./ft_token/target/wasm32-unknown-unknown/release/ft_token.wasm");
+const PROXY_TOKEN_CODE: &[u8] = include_bytes!("../../target/wasm32-unknown-unknown/release/proxy_token.wasm");
+const NFT_COLLECTION_CODE: &[u8] = include_bytes!("../../target/wasm32-unknown-unknown/release/nft_collection.wasm");
+const FUNGIBLE_TOKEN_CODE: &[u8] = include_bytes!("../../target/wasm32-unknown-unknown/release/ft_token.wasm");
 
 #[near_bindgen]
 impl Contract {
     /// Initialize the contract
     #[init]
-    pub fn new(owner_id: AccountId, stable_coin_id: AccountId, curve_type: CurveType, curve_args: CurveArgs, treasury_id: AccountId) -> Self {
+    pub fn new(owner_id: AccountId, stable_coin_id: AccountId, stable_coin_decimals: u8, curve_type: CurveType, curve_args: CurveArgs, treasury_id: AccountId) -> Self {
         assert!(!env::state_exists(), "Already initialized");
-        assert!(name.len() < 13 && name.len() > 2, "Invalid collection name");
-        assert!(symbol.len() < 13 && symbol.len() > 2, "Invalid collection symbol");
-        assert!(uri_prefix.len() > 0, "Invalid collection base uri");
-        assert!(blank_uri.len() > 0, "Invalid blank uri");
-        assert!(max_supply > 0, "Invalid max supply");
 
         Self {
             owner_id,
@@ -111,8 +105,8 @@ impl Contract {
             protocol_fee: 100,  // 1%
             finder_id: None,
             finder_fee: 100,    // 1%
-            project_token_id,
-            proxy_token_id: proxy_token,
+            project_token_id: None,
+            proxy_token_id: None,
             fund_threshold: 0,
             start_timestamp: 0,
             tp_timestamp: 0,
@@ -130,6 +124,11 @@ impl Contract {
 
     /// Active project
     pub fn active_project(&mut self, name: String, symbol: String, uri_prefix: String, blank_uri: String, max_supply: Balance, finder_id: AccountId, pre_mint_amount: Balance, fund_threshold: Balance, buffer_period: u64, conversion_period: u64) -> Promise {
+        assert!(name.len() < 13 && name.len() > 2, "Invalid collection name");
+        assert!(symbol.len() < 13 && symbol.len() > 2, "Invalid collection symbol");
+        assert!(uri_prefix.len() > 0, "Invalid collection base uri");
+        assert!(blank_uri.len() > 0, "Invalid blank uri");
+        assert!(max_supply > 0, "Invalid max supply");
         assert!(fund_threshold > 0, "Invalid funding target");
         assert!(conversion_period >= 86400, "Invalid conversion period");
 
@@ -150,7 +149,7 @@ impl Contract {
             .with_static_gas(Gas(5*TGAS))
             .new(name.clone(), symbol.clone(), &uri_prefix, &max_supply);
 
-        let proxy_token_id = "P" + name + "." + &env::current_account_id().to_string();
+        let proxy_token_id = "P".to_owned() + &name + "." + &env::current_account_id().to_string();
         Promise::new(proxy_token_id.parse().unwrap())
             .create_account()
             .transfer(MIN_STORAGE)
