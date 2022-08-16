@@ -7,11 +7,18 @@ pub const FEE_DIVISOR: u32 = 10_000;
 /// Amount of gas for fungible token transfers.
 pub const GAS_FOR_FT_TRANSFER: Gas = Gas::ONE_TERA;
 
+#[ext_contract(ext_self)]
+pub trait SelfCallbacks {
+    fn close_project_callback_after_get_owner(&mut self);
+}
+
 #[ext_contract(ext_nft_collection)]
-pub trait MultiFungibleToken {
+pub trait NonFungibleToken {
     fn new(&mut self, name: String, symbol: String, blank_uri: String, max_supply: u128);
     fn nft_mint(&mut self, receiver_id: AccountId, amount: u128);
-    fn nft_transfer(&mut self, token_id: String, receiver_id: AccountId, amount: U128, memo: Option<String>);
+    fn nft_transfer(&mut self, receiver_id: AccountId, token_id: TokenId, approval_id: Option<u64>, memo: Option<String>);
+    fn get_owner(&self) -> AccountId;
+    fn set_owner(&mut self, owner_id: AccountId);
 }
 
 #[ext_contract(ext_fungible_token)]
@@ -19,6 +26,8 @@ pub trait FungibleToken {
     fn new(&mut self, name: String, symbol: String);
     fn ft_mint(&mut self, receiver_id: AccountId, amount: u128);
     fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>);
+    fn get_owner(&self) -> AccountId;
+    fn set_owner(&mut self, owner_id: AccountId);
 }
 
 #[ext_contract(ext_proxy_token)]
@@ -26,6 +35,7 @@ pub trait ProxyToken {
     fn new(&mut self, name: String, symbol: String, blank_uri: String, max_supply: u128);
     fn mt_mint(&mut self, receiver_id: AccountId, amount: u128);
     fn mt_burn(&mut self, from_id: AccountId, token_ids: Vec<TokenId>);
+    fn mt_all_total_supply(&self);
 }
 
 /// Newton's method of integer square root.

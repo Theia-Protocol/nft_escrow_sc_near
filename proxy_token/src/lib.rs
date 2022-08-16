@@ -240,6 +240,8 @@ impl Contract {
     pub fn mt_metadata(&self) -> MtContractMetadata {
         self.metadata.get().unwrap()
     }
+
+    pub fn mt_all_total_supply(&self) -> Balance { self.all_total_supply.clone() }
 }
 
 #[allow(dead_code, unused)]
