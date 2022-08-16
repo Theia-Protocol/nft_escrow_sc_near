@@ -6,8 +6,8 @@ use crate::utils::{FEE_DIVISOR, integer_sqrt};
 impl Contract {
     #[private]
     pub fn get_sum_price(&self, to_token_id: u128) -> u128 {
-        let one_coin = 10u128.checked_pow(24).unwrap();
-        let mut price = 0u128;
+        let one_coin = 10u128.checked_pow(self.stable_coin_decimals as u32).unwrap();
+        let mut price;
         match &self.curve_type {
             CurveType::Horizontal => {
                 // p = A * x
@@ -98,7 +98,7 @@ impl Contract {
         });
 
         total_price
-            .checked_mul(FEE_DIVISOR.checked_sub(self.protocol_fee).unwrap() as u128)
+            .checked_mul(FEE_DIVISOR.checked_sub(self.treasury_fee).unwrap() as u128)
             .unwrap()
             .checked_div(FEE_DIVISOR as u128).unwrap()
     }

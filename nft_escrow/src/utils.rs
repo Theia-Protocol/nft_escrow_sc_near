@@ -8,21 +8,21 @@ pub const FEE_DIVISOR: u32 = 10_000;
 pub const GAS_FOR_FT_TRANSFER: Gas = Gas::ONE_TERA;
 
 #[ext_contract(ext_nft_collection)]
-trait MultiFungibleToken {
+pub trait MultiFungibleToken {
     fn new(&mut self, name: String, symbol: String, blank_uri: String, max_supply: u128);
     fn nft_mint(&mut self, receiver_id: AccountId, amount: u128);
     fn nft_transfer(&mut self, token_id: String, receiver_id: AccountId, amount: U128, memo: Option<String>);
 }
 
 #[ext_contract(ext_fungible_token)]
-trait FungibleToken {
+pub trait FungibleToken {
     fn new(&mut self, name: String, symbol: String);
     fn ft_mint(&mut self, receiver_id: AccountId, amount: u128);
     fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>);
 }
 
 #[ext_contract(ext_proxy_token)]
-trait ProxyToken {
+pub trait ProxyToken {
     fn new(&mut self, name: String, symbol: String, blank_uri: String, max_supply: u128);
     fn mt_mint(&mut self, receiver_id: AccountId, amount: u128);
     fn mt_burn(&mut self, from_id: AccountId, token_ids: Vec<TokenId>);

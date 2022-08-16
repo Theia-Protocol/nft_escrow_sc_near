@@ -1,6 +1,9 @@
+use near_contract_standards::non_fungible_token::TokenId;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, Balance, PanicOnDefault, Promise, Gas};
+use near_sdk::json_types::U128;
+use crate::errors::*;
 use crate::utils::{FEE_DIVISOR, GAS_FOR_FT_TRANSFER, ext_fungible_token, ext_nft_collection, ext_proxy_token};
 
 mod utils;
@@ -8,6 +11,8 @@ mod errors;
 mod views;
 mod curves;
 mod owner;
+mod validates;
+mod pause;
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "near_sdk::serde")]
@@ -52,7 +57,7 @@ pub struct Contract {
     /// Protocol account
     treasury_id: AccountId,
     /// Protocol fee percent
-    protocol_fee: u32,
+    treasury_fee: u32,
     /// Finder account
     finder_id: Option<AccountId>,
     /// Finder fee percent
@@ -75,6 +80,8 @@ pub struct Contract {
     conversion_period: u64,
     /// Stable coin
     stable_coin_id: AccountId,
+    /// Stable coin decimals
+    stable_coin_decimals: u8,
     /// Total fund amount
     total_fund_amount: Balance,
     /// Pre-mint amount
@@ -101,12 +108,12 @@ impl Contract {
     /// Initialize the contract
     #[init]
     pub fn new(owner_id: AccountId, stable_coin_id: AccountId, stable_coin_decimals: u8, curve_type: CurveType, curve_args: CurveArgs, treasury_id: AccountId) -> Self {
-        assert!(!env::state_exists(), "Already initialized");
+        assert!(!env::state_exists(), "{}", ERR08_ALREADY_INITIALIZED);
 
         Self {
             owner_id,
             treasury_id,
-            protocol_fee: 100,  // 1%
+            treasury_fee: 100,  // 1%
             finder_id: None,
             finder_fee: 100,    // 1%
             project_token_type: ProjectTokenType::NonFungible,
@@ -118,6 +125,7 @@ impl Contract {
             buffer_period: 0,
             conversion_period: 0,
             stable_coin_id,
+            stable_coin_decimals,
             total_fund_amount: 0,
             pre_mint_amount: 0,
             converted_proxy_token_amount: 0,
@@ -129,13 +137,13 @@ impl Contract {
 
     /// Active NFT project
     pub fn active_nft_project(&mut self, name: String, symbol: String, uri_prefix: String, blank_uri: String, max_supply: Balance, finder_id: AccountId, pre_mint_amount: Balance, fund_threshold: Balance, buffer_period: u64, conversion_period: u64) -> Promise {
-        assert!(name.len() < 13 && name.len() > 2, "Invalid collection name");
-        assert!(symbol.len() < 13 && symbol.len() > 2, "Invalid collection symbol");
-        assert!(uri_prefix.len() > 0, "Invalid collection base uri");
-        assert!(blank_uri.len() > 0, "Invalid blank uri");
-        assert!(max_supply > 0, "Invalid max supply");
-        assert!(fund_threshold > 0, "Invalid funding target");
-        assert!(conversion_period >= 86400, "Invalid conversion period");
+        assert!(name.len() < 13 && name.len() > 2, "{}", ERR00_INVALID_NAME);
+        assert!(symbol.len() < 13 && symbol.len() > 2, "{}", ERR01_INVALID_SYMBOL);
+        assert!(uri_prefix.len() > 0, "{}", ERR02_INVALID_COLLECTION_BASE_URI);
+        assert!(blank_uri.len() > 0, "{}", ERR03_INVALID_BLANK_URI);
+        assert!(max_supply > 0, "{}", ERR04_INVALID_MAX_SUPPLY);
+        assert!(fund_threshold > 0, "{}", ERR05_INVALID_FUNDING_TARGET);
+        assert!(conversion_period >= 86400, "{}", ERR06_INVALID_CONVERSION_PERIOD);
 
         self.finder_id = Some(finder_id);
         self.fund_threshold = fund_threshold;
@@ -150,43 +158,44 @@ impl Contract {
         self.project_token_id = Some(project_token_id.parse().unwrap());
         self.proxy_token_id = Some(proxy_token_id.parse().unwrap());
 
-        Promise::new(self.project_token_id.unwrap())
+        // deploy non-fungible token
+        Promise::new(self.project_token_id.clone().unwrap())
             .create_account()
             .transfer(MIN_STORAGE)
             .deploy_contract(NFT_COLLECTION_CODE.to_vec())
             .then(
-                ext_nft_collection::new(
-                    self.project_token_id.unwrap(),
-                    name.clone(),
-                    symbol.clone(),
-                    &uri_prefix,
-                    &max_supply,
-                    1,  // one yocto near
-                    Gas::ONE_TERA,
-                )
+                // initialize non-fungible token
+                ext_nft_collection::ext(self.project_token_id.clone().unwrap())
+                    .with_static_gas(Gas(5 * TGAS))
+                    .new(
+                        name.clone(),
+                        symbol.clone(),
+                        uri_prefix,
+                        max_supply,
+                    )
                     .then(
-                        Promise::new(self.proxy_token_id.unwrap())
+                        // deploy proxy token
+                        Promise::new(self.proxy_token_id.clone().unwrap())
                             .create_account()
                             .transfer(MIN_STORAGE)
                             .deploy_contract(PROXY_TOKEN_CODE.to_vec())
                             .then(
-                                ext_proxy_token::new(
-                                    self.proxy_token_id.unwrap(),
-                                    &name,
-                                    &symbol,
+                                // initialize proxy token
+                                ext_proxy_token::ext(self.proxy_token_id.clone().unwrap())
+                                .with_static_gas(Gas(5 * TGAS)).new(
+                                    name,
+                                    symbol,
                                     blank_uri,
                                     max_supply,
-                                    1,  // one yocto near
-                                    Gas::ONE_TERA,
                                 )
                                 .then(
-                                    ext_proxy_token::nft_mint(
-                                        self.proxy_token_id.unwrap(),
-                                        self.owner_id.clone(),
-                                        pre_mint_amount,
-                                        1,  // one yocto near
-                                        Gas::ONE_TERA,
-                                    )
+                                    // mint proxy token
+                                    ext_proxy_token::ext(self.proxy_token_id.clone().unwrap())
+                                        .with_static_gas(Gas(5 * TGAS))
+                                        .mt_mint(
+                                            self.owner_id.clone(),
+                                            pre_mint_amount,
+                                        )
                                 )
                             )
                     )
@@ -194,11 +203,13 @@ impl Contract {
     }
 
     /// Active FT project
-    pub fn active_ft_project(&mut self, name: String, symbol: String, finder_id: AccountId, pre_mint_amount: Balance, fund_threshold: Balance, buffer_period: u64, conversion_period: u64) -> Promise {
-        assert!(name.len() < 13 && name.len() > 2, "Invalid collection name");
-        assert!(symbol.len() < 13 && symbol.len() > 2, "Invalid collection symbol");
-        assert!(fund_threshold > 0, "Invalid funding target");
-        assert!(conversion_period >= 86400, "Invalid conversion period");
+    pub fn active_ft_project(&mut self, name: String, symbol: String, blank_uri: String, max_supply: u128, finder_id: AccountId, pre_mint_amount: Balance, fund_threshold: Balance, buffer_period: u64, conversion_period: u64) -> Promise {
+        assert!(name.len() < 13 && name.len() > 2, "{}", ERR00_INVALID_NAME);
+        assert!(symbol.len() < 13 && symbol.len() > 2, "{}", ERR01_INVALID_SYMBOL);
+        assert!(blank_uri.len() > 0, "{}", ERR03_INVALID_BLANK_URI);
+        assert!(max_supply > 0, "{}", ERR04_INVALID_MAX_SUPPLY);
+        assert!(fund_threshold > 0, "{}", ERR05_INVALID_FUNDING_TARGET);
+        assert!(conversion_period >= 86400, "{}", ERR06_INVALID_CONVERSION_PERIOD);
 
         self.finder_id = Some(finder_id);
         self.fund_threshold = fund_threshold;
@@ -208,41 +219,43 @@ impl Contract {
         self.start_timestamp = env::block_timestamp();
         self.project_token_type = ProjectTokenType::Fungible;
 
-        Promise::new(self.project_token_id.unwrap())
+        // deploy fungible token
+        Promise::new(self.project_token_id.clone().unwrap())
             .create_account()
             .transfer(MIN_STORAGE)
             .deploy_contract(FUNGIBLE_TOKEN_CODE.to_vec())
             .then(
-                ext_fungible_token::new(
-                    self.project_token_id.unwrap(),
-                    name.clone(),
-                    symbol.clone(),
-                    1,  // one yocto near
-                    Gas::ONE_TERA,
-                )
+                // initialize fungible token
+                ext_fungible_token::ext(self.project_token_id.clone().unwrap())
+                    .with_static_gas(Gas(5 * TGAS))
+                    .new(
+                        name.clone(),
+                        symbol.clone()
+                    )
                     .then(
-                        Promise::new(self.proxy_token_id.unwrap())
+                        // deploy proxy token
+                        Promise::new(self.proxy_token_id.clone().unwrap())
                             .create_account()
                             .transfer(MIN_STORAGE)
                             .deploy_contract(PROXY_TOKEN_CODE.to_vec())
                             .then(
-                                ext_proxy_token::new(
-                                    self.proxy_token_id.unwrap(),
-                                    &name,
-                                    &symbol,
-                                    blank_uri,
-                                    max_supply,
-                                    1,  // one yocto near
-                                    Gas::ONE_TERA,
-                                )
+                                // initialize proxy token
+                                ext_proxy_token::ext(self.proxy_token_id.clone().unwrap())
+                                    .with_static_gas(Gas(5 * TGAS))
+                                    .new(
+                                        name,
+                                        symbol,
+                                        blank_uri,
+                                        max_supply,
+                                    )
                                     .then(
-                                        ext_proxy_token::nft_mint(
-                                            self.proxy_token_id.unwrap(),
-                                            self.owner_id.clone(),
-                                            pre_mint_amount,
-                                            1,  // one yocto near
-                                            Gas::ONE_TERA,
-                                        )
+                                        // pre-mint proxy token to owner
+                                        ext_proxy_token::ext(self.proxy_token_id.clone().unwrap())
+                                            .with_static_gas(Gas(5 * TGAS))
+                                            .mt_mint(
+                                                self.owner_id.clone(),
+                                                pre_mint_amount,
+                                            )
                                     )
                             )
                     )
@@ -250,17 +263,19 @@ impl Contract {
     }
 
     pub fn buy(&mut self, amount: Balance, coin_amount: Balance) -> Promise {
+        self.assert_not_paused();
+        self.assert_is_ongoing();
+
         let cal_coin_amount = self.calculate_buy_proxy_token(amount);
+        assert!(coin_amount >= cal_coin_amount, "{}", ERR07_INSUFFICIENT_FUND);
 
-        assert!(coin_amount >= cal_coin_amount, "Insufficient fund");
-
-        let protocol_fee_amount = cal_coin_amount
-            .checked_mul(self.protocol_fee as u128)
+        let treasury_fee_amount = cal_coin_amount
+            .checked_mul(self.treasury_fee as u128)
             .unwrap()
             .checked_div(FEE_DIVISOR as u128)
             .unwrap();
 
-        let reserve_fund_amount = cal_coin_amount.checked_sub(protocol_fee_amount).unwrap();
+        let reserve_fund_amount = cal_coin_amount.checked_sub(treasury_fee_amount).unwrap();
 
         self.total_fund_amount = self.total_fund_amount
             .checked_add(reserve_fund_amount)
@@ -270,32 +285,61 @@ impl Contract {
             self.tp_timestamp = env::block_timestamp();
         }
 
-        ext_fungible_token::ft_transfer(
-            &(self.stable_coin_id),
-            env::predecessor_account_id(),
-            reserve_fund_amount.into(),
-            None,
-            1,  // one yocto near
-            GAS_FOR_FT_TRANSFER,
-        )
-        .then(
-            ext_fungible_token::ft_transfer(
-                &(self.stable_coin_id),
-                env::predecessor_account_id(),
-                protocol_fee_amount,
+        // Transfer stable coin to customer
+        ext_fungible_token::ext(self.stable_coin_id.clone())
+            .with_static_gas(GAS_FOR_FT_TRANSFER)
+            .ft_transfer(
+                env::current_account_id(),
+                U128::from(reserve_fund_amount),
                 None,
-                1,  // one yocto near
-                GAS_FOR_FT_TRANSFER,
             )
-        ).then(
-            ext_proxy_token::nft_mint(
-                self.proxy_token_id.clone(),
+            .then(
+                // Transfer stable coin to customer
+                ext_fungible_token::ext(self.stable_coin_id.clone())
+                    .with_static_gas(GAS_FOR_FT_TRANSFER)
+                    .ft_transfer(
+                        self.treasury_id.clone(),
+                        U128::from(treasury_fee_amount),
+                        None,
+                    )
+                    .then(
+                        // Mint proxy token to customer
+                        ext_proxy_token::ext(self.proxy_token_id.clone().unwrap())
+                            .with_static_gas(Gas(5 * TGAS))
+                            .mt_mint(
+                                env::predecessor_account_id(),
+                                amount
+                            )
+                    )
+            )
+    }
+
+    pub fn sell(&mut self, token_ids: Vec<TokenId>) -> Promise {
+        self.assert_not_paused();
+        self.assert_is_ongoing();
+
+        let cal_coin_amount = self.calculate_sell_proxy_token(token_ids.clone());
+        assert!(cal_coin_amount > 0, "{}", ERR09_INVALID_ACTION);
+
+        self.total_fund_amount = self.total_fund_amount.checked_sub(cal_coin_amount).unwrap();
+
+        // Transfer stable coin to customer
+        ext_fungible_token::ext(self.stable_coin_id.clone())
+            .with_static_gas(GAS_FOR_FT_TRANSFER)
+            .ft_transfer(
                 env::predecessor_account_id(),
-                amount,
-                1,  // one yocto near
-                GAS_FOR_FT_TRANSFER
+                U128::from(cal_coin_amount),
+                None,
             )
-        )
+            .then(
+                // Burn Proxy Token
+                ext_proxy_token::ext(self.proxy_token_id.clone().unwrap())
+                    .with_static_gas(Gas(5 * TGAS))
+                    .mt_burn(
+                        env::predecessor_account_id(),
+                        token_ids
+                    )
+            )
     }
 }
 

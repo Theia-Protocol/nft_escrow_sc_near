@@ -1,11 +1,25 @@
-// Storage errors.
+// Escrow errors.
+pub const ERR00_INVALID_NAME: &str = "E00: Invalid name";
+pub const ERR01_INVALID_SYMBOL: &str = "E01: Invalid symbol";
+pub const ERR02_INVALID_COLLECTION_BASE_URI: &str = "E02: Invalid collection base uri";
+pub const ERR03_INVALID_BLANK_URI: &str = "E03: Invalid blank uri";
+pub const ERR04_INVALID_MAX_SUPPLY: &str = "E04: Invalid max supply";
+pub const ERR05_INVALID_FUNDING_TARGET: & str = "E05: Invalid funding target";
+pub const ERR06_INVALID_CONVERSION_PERIOD: & str = "E06: Invalid conversion period (min: 1 day)";
+pub const ERR07_INSUFFICIENT_FUND: & str = "E07: Insufficient fund";
+pub const ERR08_ALREADY_INITIALIZED: & str = "E08: Already initialized";
+pub const ERR09_INVALID_ACTION: &str = "E09: Invalid action";
 
-pub const ERR10_ACC_NOT_REGISTERED: &str = "E10: account not registered";
-pub const ERR11_INSUFFICIENT_STORAGE: &str = "E11: insufficient $NEAR storage deposit";
-pub const ERR12_TOKEN_NOT_WHITELISTED: &str = "E12: token not whitelisted";
-pub const ERR13_LP_NOT_REGISTERED: &str = "E13: LP not registered";
-pub const ERR14_LP_ALREADY_REGISTERED: &str = "E14: LP already registered";
-pub const ERR15_NO_STORAGE_CAN_WITHDRAW: &str = "E15: no storage can withdraw";
-pub const ERR16_STORAGE_WITHDRAW_TOO_MUCH: &str = "E16: storage withdraw too much";
-pub const ERR17_DEPOSIT_LESS_THAN_MIN_STORAGE: &str = "E17: deposit less than min storage";
-pub const ERR18_TOKENS_NOT_EMPTY: &str = "E18: storage unregister tokens not empty";
+// Validate errors
+pub const ERR10_NOT_ACTIVATED: &str = "E10: Escrow is not activated";
+pub const ERR11_NOT_ONGOING: &str = "E11: Escrow is not in ongoing state";
+pub const ERR12_NOT_OVER_FUNDING_TARGET: &str = "E12: Escrow is not reached to funding threshold";
+pub const ERR13_IN_BUFFER_PERIOD: &str = "E13: Escrow is in buffer period";
+pub const ERR14_OVER_CONVERSION_PERIOD: &str = "E14: Escrow is outside of conversion period";
+pub const ERR15_NOT_OVER_CONVERSION_PERIOD: &str = "E15: Escrow is not over conversion period";
+
+// Owner errors
+pub const ERR20_NOT_ALLOW: &str = "E20: The action is allowed by only owner";
+
+// Pause errors
+pub const ERR30_PAUSED: &str = "E20: Escrow was paused";
