@@ -1,11 +1,31 @@
-use near_sdk::{ext_contract, AccountId};
+use near_contract_standards::non_fungible_token::TokenId;
+use near_sdk::{ext_contract, AccountId, Gas};
+use near_sdk::json_types::{U128};
 
 /// Fee divisor, allowing to provide fee in bps.
 pub const FEE_DIVISOR: u32 = 10_000;
+/// Amount of gas for fungible token transfers.
+pub const GAS_FOR_FT_TRANSFER: Gas = Gas::ONE_TERA;
 
-#[ext_contract(ext_self)]
-pub trait SelfCallbacks {
-    fn active_project_callback(&mut self, token_id: AccountId);
+#[ext_contract(ext_nft_collection)]
+trait MultiFungibleToken {
+    fn new(&mut self, name: String, symbol: String, blank_uri: String, max_supply: u128);
+    fn nft_mint(&mut self, receiver_id: AccountId, amount: u128);
+    fn nft_transfer(&mut self, token_id: String, receiver_id: AccountId, amount: U128, memo: Option<String>);
+}
+
+#[ext_contract(ext_fungible_token)]
+trait FungibleToken {
+    fn new(&mut self, name: String, symbol: String);
+    fn ft_mint(&mut self, receiver_id: AccountId, amount: u128);
+    fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>);
+}
+
+#[ext_contract(ext_proxy_token)]
+trait ProxyToken {
+    fn new(&mut self, name: String, symbol: String, blank_uri: String, max_supply: u128);
+    fn mt_mint(&mut self, receiver_id: AccountId, amount: u128);
+    fn mt_burn(&mut self, from_id: AccountId, token_ids: Vec<TokenId>);
 }
 
 /// Newton's method of integer square root.
