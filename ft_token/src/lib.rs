@@ -1,6 +1,6 @@
 mod owner;
 
-use near_contract_standards::fungible_token::events::FtMint;
+use near_contract_standards::fungible_token::events::{FtBurn, FtMint};
 use near_contract_standards::fungible_token::metadata::{
     FungibleTokenMetadata, FungibleTokenMetadataProvider, FT_METADATA_SPEC,
 };
@@ -53,7 +53,7 @@ impl Contract {
         }
     }
 
-    pub fn ft_mint(&mut self, receive_id: AccountId, amount: Balance) -> bool {
+    pub fn ft_mint(&mut self, receive_id: AccountId, amount: Balance) {
         require!(env::predecessor_account_id() == self.owner_id, "UnAuthorized");
 
         self.token.internal_deposit(&receive_id, amount);
@@ -62,8 +62,17 @@ impl Contract {
             amount: &U128(amount),
             memo: None
         }.emit();
+    }
 
-        true
+    pub fn ft_burn(&mut self, from_id: AccountId, amount: Balance) {
+        require!(env::predecessor_account_id() == self.owner_id, "UnAuthorized");
+
+        self.token.internal_withdraw(&from_id, amount);
+        FtBurn {
+            owner_id: &(from_id),
+            amount: &U128(amount),
+            memo: None
+        }.emit();
     }
 
     fn on_account_closed(&mut self, account_id: AccountId, balance: Balance) {
@@ -89,6 +98,7 @@ impl FungibleTokenMetadataProvider for Contract {
 #[cfg(test)]
 mod tests {
     use near_sdk::{test_utils::*, testing_env, AccountId, ONE_NEAR};
+    use super::*;
 
     fn contract_account() -> AccountId {
         "contract".parse::<AccountId>().unwrap()
@@ -105,5 +115,46 @@ mod tests {
     }
 
     #[test]
-    fn test() {}
+    fn test() {
+        let owner_id = accounts(0);
+        let alice_id = accounts(1);
+        // deploy
+        testing_env!(get_context(owner_id.clone()).build());
+        let mut contract = Contract::new(owner_id.clone(), String::from("Test FT"), String::from("TFT"));
+
+        // mint
+        testing_env!(
+            get_context(owner_id.clone())
+                .attached_deposit(125 * env::storage_byte_cost())
+                .build()
+        );
+        contract.storage_deposit(Some(accounts(0)), None);
+        contract.ft_mint(accounts(0), 1_000_000u128);
+        assert_eq!(contract.ft_balance_of(accounts(0)), 1_000_000u128);
+
+        testing_env!(get_context(alice.clone()).build());
+        let alice_mint = call!(
+            alice,
+            contract.ft_mint(accounts(0), 1_000_000u128),
+            deposit = 0,
+        );
+
+        // transfer
+        testing_env!(
+            get_context(owner_id.clone())
+                .attached_deposit(125 * env::storage_byte_cost())
+                .build()
+        );
+        contract.storage_deposit(Some(alice_id.clone()), None);
+        testing_env!(
+             get_context(owner_id.clone())
+                .attached_deposit(1)
+                .build());
+        contract.ft_transfer(alice_id.clone(), 1_000u128.into(), None);
+        assert_eq!(contract.ft_balance_of(accounts(1)), 1_000u128);
+
+        // burn
+        contract.ft_burn(alice_id.clone(), 500u128.into());
+        assert_eq!(contract.ft_balance_of(accounts(1)), 500u128);
+    }
 }

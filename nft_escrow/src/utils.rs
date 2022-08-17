@@ -1,5 +1,5 @@
 use near_contract_standards::non_fungible_token::TokenId;
-use near_sdk::{ext_contract, AccountId, Gas};
+use near_sdk::{ext_contract, AccountId, Gas, Balance};
 use near_sdk::json_types::{U128};
 
 /// Fee divisor, allowing to provide fee in bps.
@@ -9,7 +9,8 @@ pub const GAS_FOR_FT_TRANSFER: Gas = Gas::ONE_TERA;
 
 #[ext_contract(ext_self)]
 pub trait SelfCallbacks {
-    fn close_project_callback_after_get_owner(&mut self);
+    fn convert_callback(&mut self, converted_amount: Balance);
+    fn close_project_callback(&mut self);
 }
 
 #[ext_contract(ext_nft_collection)]
@@ -35,6 +36,7 @@ pub trait ProxyToken {
     fn new(&mut self, name: String, symbol: String, blank_uri: String, max_supply: u128);
     fn mt_mint(&mut self, receiver_id: AccountId, amount: u128);
     fn mt_burn(&mut self, from_id: AccountId, token_ids: Vec<TokenId>);
+    fn mt_burn_with_amount(&mut self, from_id: AccountId, start_id: TokenId, amount: Balance);
     fn mt_all_total_supply(&self);
 }
 

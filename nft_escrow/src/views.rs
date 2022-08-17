@@ -12,7 +12,7 @@ impl Contract {
 
     pub fn get_treasury_fee(&self) -> u32 { self.treasury_fee }
 
-    pub fn get_treasury_id(&self) -> AccountId { self.treasury_id.clone().unwrap() }
+    pub fn get_treasury_id(&self) -> AccountId { self.treasury_id.clone() }
 
     pub fn get_fund_threshold(&self) -> Balance { self.fund_threshold }
 

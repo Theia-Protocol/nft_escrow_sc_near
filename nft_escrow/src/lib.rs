@@ -12,7 +12,7 @@ use near_sdk::serde::{Deserialize, Serialize};
 use near_sdk::{env, near_bindgen, AccountId, Balance, PanicOnDefault, Promise, Gas, PromiseError};
 use near_sdk::json_types::U128;
 use crate::errors::*;
-use crate::utils::{FEE_DIVISOR, GAS_FOR_FT_TRANSFER, ext_fungible_token, ext_nft_collection, ext_proxy_token};
+use crate::utils::{FEE_DIVISOR, GAS_FOR_FT_TRANSFER, ext_self, ext_fungible_token, ext_nft_collection, ext_proxy_token};
 
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Eq, PartialEq, Clone)]
@@ -142,6 +142,8 @@ impl Contract {
 
     /// Active NFT project
     pub fn active_nft_project(&mut self, name: String, symbol: String, uri_prefix: String, blank_uri: String, max_supply: Balance, finder_id: AccountId, pre_mint_amount: Balance, fund_threshold: Balance, buffer_period: u64, conversion_period: u64) -> Promise {
+        self.assert_owner();
+        assert_eq!(self.is_closed, false, "{}", ERR013_ALREADY_CLOSED);
         assert!(name.len() < 13 && name.len() > 2, "{}", ERR00_INVALID_NAME);
         assert!(symbol.len() < 13 && symbol.len() > 2, "{}", ERR01_INVALID_SYMBOL);
         assert!(uri_prefix.len() > 0, "{}", ERR02_INVALID_COLLECTION_BASE_URI);
@@ -209,6 +211,8 @@ impl Contract {
 
     /// Active FT project
     pub fn active_ft_project(&mut self, name: String, symbol: String, blank_uri: String, max_supply: u128, finder_id: AccountId, pre_mint_amount: Balance, fund_threshold: Balance, buffer_period: u64, conversion_period: u64) -> Promise {
+        self.assert_owner();
+        assert_eq!(self.is_closed, false, "{}", ERR013_ALREADY_CLOSED);
         assert!(name.len() < 13 && name.len() > 2, "{}", ERR00_INVALID_NAME);
         assert!(symbol.len() < 13 && symbol.len() > 2, "{}", ERR01_INVALID_SYMBOL);
         assert!(blank_uri.len() > 0, "{}", ERR03_INVALID_BLANK_URI);
@@ -351,8 +355,6 @@ impl Contract {
         self.assert_not_paused();
         self.assert_is_after_buffer_period();
 
-        self.converted_proxy_token_amount = self.converted_proxy_token_amount.checked_add(token_ids.len() as u128).unwrap();
-
         let burn_proxy = ext_proxy_token::ext(self.proxy_token_id.clone().unwrap())
             .with_static_gas(Gas(5 * TGAS))
             .mt_burn(
@@ -360,15 +362,30 @@ impl Contract {
                 token_ids,
             );
 
-        match self.is_closed {
+        let convert_project_token = match self.is_closed {
             true => {
-                self.internal_project_token_mint(env::predecessor_account_id(), token_ids.len() as u128).then(burn_proxy)
+                self.internal_project_token_mint(env::predecessor_account_id(), token_ids.len() as u128)
             }
             false => {
                 // owner
-                self.internal_convert_transfer(env::predecessor_account_id(), token_ids.len() as u128).then(burn_proxy)
+                self.internal_convert_transfer(env::predecessor_account_id(), token_ids.len() as u128)
             }
+        };
+
+        let convert_callback =
+            ext_self::ext(env::current_account_id())
+                .with_static_gas(Gas(5 * TGAS))
+                .convert_callback(token_ids.len() as Balance);
+
+        convert_project_token.then(burn_proxy).then(convert_callback)
+    }
+
+    #[private]
+    pub fn convert_callback(&mut self, converted_amount: Balance, #[callback_result] call_result: Result<(), PromiseError>) {
+        if call_result.is_err() {
+            env::panic_str(ERR014_CONVERT_FAILED);
         }
+        self.converted_proxy_token_amount = self.converted_proxy_token_amount.checked_add(converted_amount).unwrap();
     }
 
     pub fn claim_fund(&mut self, to: AccountId, amount: u128) -> Promise {
@@ -382,16 +399,16 @@ impl Contract {
         let fund_transfer = ext_fungible_token::ext(self.stable_coin_id.clone())
             .with_static_gas(Gas(5 * TGAS))
             .ft_transfer(
-                self.owner_id.clone(),
-                U128.from(amount - finder_fee_amount),
+                to,
+                U128::from(amount - finder_fee_amount),
                 None,
             );
 
         let finder_fee_transfer = ext_fungible_token::ext(self.stable_coin_id.clone())
             .with_static_gas(Gas(5 * TGAS))
             .ft_transfer(
-                self.finder_id.clone(),
-                U128.from(finder_fee_amount),
+                self.finder_id.clone().unwrap(),
+                U128::from(finder_fee_amount),
                 None,
             );
 
@@ -408,35 +425,34 @@ impl Contract {
             ERR011_NOT_AVAILABLE_TO_CLOSE
         );
 
-        assert_eq!(self.is_closed != true, "{}", ERR013_ALREADY_CLOSED);
+        assert_eq!(self.is_closed, false, "{}", ERR013_ALREADY_CLOSED);
 
         let transfer_owner = match self.project_token_type {
-            ProjectTokenType::Fungible => ext_fungible_token::ext(self.project_token_id.clone())
+            ProjectTokenType::Fungible => ext_fungible_token::ext(self.project_token_id.clone().unwrap())
                 .with_static_gas(Gas(5 * TGAS))
                 .set_owner(self.owner_id.clone()),
-            ProjectTokenType::NonFungible => ext_nft_collection::ext(self.project_token_id.clone())
+            ProjectTokenType::NonFungible => ext_nft_collection::ext(self.project_token_id.clone().unwrap())
                 .with_static_gas(Gas(5 * TGAS))
                 .set_owner(self.owner_id.clone())
         };
 
-        let close_project_callback_latest =
+        let close_project_callback =
             ext_self::ext(env::current_account_id())
                 .with_static_gas(Gas(5 * TGAS))
-                .close_project_callback_latest();
+                .close_project_callback();
 
         if self.pre_mint_amount > 0 {
             let pre_mint = self.internal_project_token_mint(self.owner_id.clone(), self.pre_mint_amount);
-            let burn_batch =
-                ext_nft_collection::ext(self.project_token_id.clone())
+            let burn_batch = ext_proxy_token::ext(self.proxy_token_id.clone().unwrap())
                     .with_static_gas(Gas(5 * TGAS))
                     .mt_burn_with_amount(
                         self.owner_id.clone(),
-                        0u128,
+                        "0".to_string(),
                         self.pre_mint_amount,
                     );
-            burn_batch.then(pre_mint).then(transfer_owner).then(close_project_callback_latest)
+            burn_batch.then(pre_mint).then(transfer_owner).then(close_project_callback)
         } else {
-            transfer_owner.then(close_project_callback_latest)
+            transfer_owner.then(close_project_callback)
         }
     }
 
@@ -451,13 +467,13 @@ impl Contract {
     pub fn internal_project_token_mint(&mut self, to: AccountId, amount: u128) -> Promise {
         match self.project_token_type {
             ProjectTokenType::NonFungible => ext_nft_collection::ext(self.project_token_id.clone().unwrap())
-                .with_static_gas(GAS(5 * TGAS))
+                .with_static_gas(Gas(5 * TGAS))
                 .nft_mint(
                     to,
                     amount,
                 ),
             ProjectTokenType::Fungible => ext_fungible_token::ext(self.project_token_id.clone().unwrap())
-                .with_static_gas(GAS(5 * TGAS))
+                .with_static_gas(Gas(5 * TGAS))
                 .ft_mint(
                     to,
                     amount,
@@ -467,22 +483,24 @@ impl Contract {
 
     pub fn internal_convert_transfer(&mut self, to: AccountId, amount: u128) -> Promise {
         match self.project_token_type {
-            ProjectTokenType::NonFungible => (0..amount - 1).map(|id| {
-                let token_id: TokenId = (self.pre_mint_amount + self.converted_proxy_token_amount + id).to_string();
-                ext_nft_collection::ext(self.project_token_id.clone().unwrap())
-                    .with_static_gas(GAS(5 * TGAS))
-                    .nft_transfer(
-                        to,
-                        token_id,
-                        None,
-                        None,
-                    )
-            }).collect(),
+            ProjectTokenType::NonFungible => {
+                (0..amount - 1).map(|id| {
+                    let token_id: TokenId = (self.pre_mint_amount + self.converted_proxy_token_amount + id).to_string();
+                    ext_nft_collection::ext(self.project_token_id.clone().unwrap())
+                        .with_static_gas(Gas(5 * TGAS))
+                        .nft_transfer(
+                            to.clone(),
+                            token_id,
+                            None,
+                            None,
+                        )
+                }).collect()
+            },
             ProjectTokenType::Fungible => ext_fungible_token::ext(self.project_token_id.clone().unwrap())
-                .with_static_gas(GAS(5 * TGAS))
+                .with_static_gas(Gas(5 * TGAS))
                 .ft_transfer(
                     to,
-                    U128.from(amount),
+                    U128::from(amount),
                     None,
                 ),
         }
