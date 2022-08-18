@@ -287,7 +287,7 @@ mod tests {
                 .build()
         );
         contract.mt_mint(alice_id.clone(), 3u128.into());
-        assert_eq!(contract.mt_balance_of(alice_id.clone()), 3u128.into());
+        assert_eq!(contract.mt_balance_of(alice_id.clone(), ["0".to_string(), "1".to_string(), "2".to_string()].to_vec()), [1u128.into(), 1u128.into(), 1u128.into()].to_vec());
         assert_eq!(contract.mt_all_total_supply(), 3u128.into());
 
         // burn
