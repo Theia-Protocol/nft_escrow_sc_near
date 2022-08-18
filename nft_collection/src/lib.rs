@@ -127,6 +127,7 @@ impl NonFungibleTokenMetadataProvider for Contract {
 #[cfg(test)]
 mod tests {
     use near_sdk::{test_utils::*, testing_env, AccountId, ONE_NEAR};
+    use super::*;
 
     fn contract_account() -> AccountId {
         "contract".parse::<AccountId>().unwrap()
@@ -143,5 +144,40 @@ mod tests {
     }
 
     #[test]
-    fn test() {}
+    fn test() {
+        let owner_id = accounts(0);
+        let alice_id = accounts(1);
+
+        // deploy
+        testing_env!(get_context(owner_id.clone()).build());
+        let mut contract = Contract::new(
+            owner_id.clone(),
+            String::from("Test FT"),
+            String::from("TFT"),
+            String::from("https://ipfs.io/ipfs/QmXa5nrfaqrvvcYFeEvs8E9W7AAeCZeUAuN6jophN9y8Ds/"),
+            100,
+            String::from("https://ipfs.io/ipfs/QmXa5nrfaqrvvcYFeEvs8E9W7AAeCZeUAuN6jophN9y8Ds/"),
+            String::from("")
+        );
+
+        // mint
+        testing_env!(
+            get_context(owner_id.clone())
+                .attached_deposit(677 * env::storage_byte_cost())
+                .build()
+        );
+        contract.nft_mint(accounts(0), 1u128.into());
+        assert_eq!(contract.nft_supply_for_owner(accounts(0)), 1u128.into());
+
+        // transfer
+        testing_env!(
+             get_context(owner_id.clone())
+                .attached_deposit(677 * env::storage_byte_cost())
+                .attached_deposit(1)
+                .build());
+        contract.nft_transfer(alice_id.clone(), "0".to_string(), None, None);
+        assert_eq!(contract.nft_supply_for_owner(accounts(0)), 0u128.into());
+        assert_eq!(contract.nft_supply_for_owner(accounts(1)), 1u128.into());
+        assert_eq!(contract.nft_total_supply(), 1u128.into());
+    }
 }

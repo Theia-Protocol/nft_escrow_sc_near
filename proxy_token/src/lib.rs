@@ -248,6 +248,7 @@ impl Contract {
 #[cfg(test)]
 mod tests {
     use near_sdk::{test_utils::*, testing_env, AccountId, ONE_NEAR};
+    use super::*;
 
     fn contract_account() -> AccountId {
         "contract".parse::<AccountId>().unwrap()
@@ -264,5 +265,39 @@ mod tests {
     }
 
     #[test]
-    fn test() {}
+    fn test() {
+        let owner_id = accounts(0);
+        let alice_id = accounts(1);
+
+        // deploy
+        testing_env!(get_context(owner_id.clone()).build());
+        let mut contract = Contract::new(
+            owner_id.clone(),
+            String::from("Test Proxy NFT"),
+            String::from("TPN"),
+            String::from("https://ipfs.io/ipfs/QmXa5nrfaqrvvcYFeEvs8E9W7AAeCZeUAuN6jophN9y8Ds/"),
+            100,
+            String::from("")
+        );
+
+        // mint
+        testing_env!(
+            get_context(owner_id.clone())
+                .attached_deposit(677 * env::storage_byte_cost())
+                .build()
+        );
+        contract.mt_mint(alice_id.clone(), 3u128.into());
+        assert_eq!(contract.mt_balance_of(alice_id.clone()), 3u128.into());
+        assert_eq!(contract.mt_all_total_supply(), 3u128.into());
+
+        // burn
+        testing_env!(
+             get_context(owner_id.clone())
+                .attached_deposit(677 * env::storage_byte_cost())
+                .attached_deposit(1)
+                .build());
+        contract.mt_burn(alice_id.clone(), ["0".to_string(), "1".to_string()].to_vec());
+        assert_eq!(contract.mt_balance_of(accounts(1), ["0".to_string(), "1".to_string(), "2".to_string()].to_vec()), [0u128.into(), 0u128.into(), 1u128.into()].to_vec());
+        assert_eq!(contract.mt_all_total_supply(), 1u128.into());
+    }
 }

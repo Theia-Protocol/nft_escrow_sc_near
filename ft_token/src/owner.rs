@@ -15,7 +15,7 @@ impl Contract {
         assert_eq!(
             env::predecessor_account_id(),
             self.owner_id,
-            "no permission to invoke this"
+            "No permission to invoke this"
         );
     }
 }

@@ -118,6 +118,7 @@ mod tests {
     fn test() {
         let owner_id = accounts(0);
         let alice_id = accounts(1);
+
         // deploy
         testing_env!(get_context(owner_id.clone()).build());
         let mut contract = Contract::new(owner_id.clone(), String::from("Test FT"), String::from("TFT"));
@@ -129,15 +130,8 @@ mod tests {
                 .build()
         );
         contract.storage_deposit(Some(accounts(0)), None);
-        contract.ft_mint(accounts(0), 1_000_000u128);
-        assert_eq!(contract.ft_balance_of(accounts(0)), 1_000_000u128);
-
-        testing_env!(get_context(alice.clone()).build());
-        let alice_mint = call!(
-            alice,
-            contract.ft_mint(accounts(0), 1_000_000u128),
-            deposit = 0,
-        );
+        contract.ft_mint(accounts(0), 1_000_000u128.into());
+        assert_eq!(contract.ft_balance_of(accounts(0)), 1_000_000u128.into());
 
         // transfer
         testing_env!(
@@ -151,10 +145,10 @@ mod tests {
                 .attached_deposit(1)
                 .build());
         contract.ft_transfer(alice_id.clone(), 1_000u128.into(), None);
-        assert_eq!(contract.ft_balance_of(accounts(1)), 1_000u128);
+        assert_eq!(contract.ft_balance_of(accounts(1)), 1_000u128.into());
 
         // burn
         contract.ft_burn(alice_id.clone(), 500u128.into());
-        assert_eq!(contract.ft_balance_of(accounts(1)), 500u128);
+        assert_eq!(contract.ft_balance_of(accounts(1)), 500u128.into());
     }
 }

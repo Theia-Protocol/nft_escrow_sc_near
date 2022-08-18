@@ -15,8 +15,7 @@ impl Contract {
         assert_eq!(
             env::predecessor_account_id(),
             self.tokens.owner_id,
-            "{}",
-            ERR20_NOT_ALLOW
+            "No permission to invoke this"
         );
     }
 }
