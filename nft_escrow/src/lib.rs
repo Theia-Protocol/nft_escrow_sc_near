@@ -15,9 +15,8 @@ use crate::errors::*;
 use crate::utils::{FEE_DIVISOR, GAS_FOR_FT_TRANSFER, ext_self, ext_fungible_token, ext_nft_collection, ext_proxy_token};
 
 
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Eq, PartialEq, Clone)]
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
 #[serde(crate = "near_sdk::serde")]
-#[cfg_attr(not(target_arch = "wasm32"), derive(Debug))]
 pub enum RunningState {
     Running,
     Paused,
@@ -31,9 +30,8 @@ pub enum ProjectTokenType {
     Fungible,
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Eq, PartialEq, Clone)]
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
 #[serde(crate = "near_sdk::serde")]
-#[cfg_attr(not(target_arch = "wasm32"), derive(Debug))]
 pub enum CurveType {
     Horizontal,
     Linear,
@@ -144,7 +142,7 @@ impl Contract {
     pub fn active_nft_project(&mut self, name: String, symbol: String, uri_prefix: String, blank_uri: String, max_supply: Balance, finder_id: AccountId, pre_mint_amount: Balance, fund_threshold: Balance, buffer_period: u64, conversion_period: u64) -> Promise {
         self.assert_owner();
         assert_eq!(self.is_closed, false, "{}", ERR013_ALREADY_CLOSED);
-        assert!(name.len() < 13 && name.len() > 2, "{}", ERR00_INVALID_NAME);
+        assert!(name.len() > 2, "{}", ERR00_INVALID_NAME);
         assert!(symbol.len() < 13 && symbol.len() > 2, "{}", ERR01_INVALID_SYMBOL);
         assert!(uri_prefix.len() > 0, "{}", ERR02_INVALID_COLLECTION_BASE_URI);
         assert!(blank_uri.len() > 0, "{}", ERR03_INVALID_BLANK_URI);
@@ -162,8 +160,8 @@ impl Contract {
 
         let project_token_id = name.clone() + "." + &env::current_account_id().to_string();
         let proxy_token_id = "P".to_owned() + &name + "." + &env::current_account_id().to_string();
-        self.project_token_id = Some(project_token_id.parse().unwrap());
-        self.proxy_token_id = Some(proxy_token_id.parse().unwrap());
+        self.proxy_token_id = Some(proxy_token_id);
+        self.project_token_id = Some(project_token_id);
 
         // deploy non-fungible token
         Promise::new(self.project_token_id.clone().unwrap())
@@ -359,7 +357,7 @@ impl Contract {
             .with_static_gas(Gas(5 * TGAS))
             .mt_burn(
                 env::predecessor_account_id(),
-                token_ids,
+                token_ids.clone(),
             );
 
         let convert_project_token = match self.is_closed {
@@ -444,12 +442,12 @@ impl Contract {
         if self.pre_mint_amount > 0 {
             let pre_mint = self.internal_project_token_mint(self.owner_id.clone(), self.pre_mint_amount);
             let burn_batch = ext_proxy_token::ext(self.proxy_token_id.clone().unwrap())
-                    .with_static_gas(Gas(5 * TGAS))
-                    .mt_burn_with_amount(
-                        self.owner_id.clone(),
-                        "0".to_string(),
-                        self.pre_mint_amount,
-                    );
+                .with_static_gas(Gas(5 * TGAS))
+                .mt_burn_with_amount(
+                    self.owner_id.clone(),
+                    "0".to_string(),
+                    self.pre_mint_amount,
+                );
             burn_batch.then(pre_mint).then(transfer_owner).then(close_project_callback)
         } else {
             transfer_owner.then(close_project_callback)
@@ -484,18 +482,29 @@ impl Contract {
     pub fn internal_convert_transfer(&mut self, to: AccountId, amount: u128) -> Promise {
         match self.project_token_type {
             ProjectTokenType::NonFungible => {
-                (0..amount - 1).map(|id| {
+                let mut promise = ext_nft_collection::ext(self.project_token_id.clone().unwrap())
+                    .with_static_gas(Gas(5 * TGAS))
+                    .nft_transfer(
+                        to.clone(),
+                        (self.pre_mint_amount + self.converted_proxy_token_amount).to_string(),
+                        None,
+                        None,
+                    );
+                let mut id = 1;
+                while id < amount {
                     let token_id: TokenId = (self.pre_mint_amount + self.converted_proxy_token_amount + id).to_string();
-                    ext_nft_collection::ext(self.project_token_id.clone().unwrap())
+                    promise = promise.and(ext_nft_collection::ext(self.project_token_id.clone().unwrap())
                         .with_static_gas(Gas(5 * TGAS))
                         .nft_transfer(
                             to.clone(),
                             token_id,
                             None,
                             None,
-                        )
-                }).collect()
-            },
+                        ));
+                    id += 1;
+                }
+                promise
+            }
             ProjectTokenType::Fungible => ext_fungible_token::ext(self.project_token_id.clone().unwrap())
                 .with_static_gas(Gas(5 * TGAS))
                 .ft_transfer(
@@ -512,6 +521,7 @@ impl Contract {
 #[cfg(test)]
 mod tests {
     use near_sdk::{test_utils::*, testing_env, AccountId, ONE_NEAR};
+    use super::*;
 
     fn contract_account() -> AccountId {
         "contract".parse::<AccountId>().unwrap()

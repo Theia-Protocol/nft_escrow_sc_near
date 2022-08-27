@@ -872,7 +872,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "near-contract-standards",
- "near-contract-tools 0.5.0",
+ "near-contract-tools",
  "near-sdk",
  "near-units",
  "tokio",
@@ -1436,38 +1436,14 @@ dependencies = [
 
 [[package]]
 name = "near-contract-tools"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "100c47bee984cd95797a00a288fd6caeb4efde36901cf4e60089f2bfef3f3bfc"
-dependencies = [
- "near-contract-tools-macros 0.4.0",
- "near-sdk",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "near-contract-tools"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "039b69bfa9939d76ab24f11a6544b6d44d0bd92cfa915ad8ecc652fcaa83f3c0"
 dependencies = [
- "near-contract-tools-macros 0.5.0",
+ "near-contract-tools-macros",
  "near-sdk",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "near-contract-tools-macros"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7d9d91e0b0da832f4a4e2b1a7a440cdbe37357186f6d2f6969a9f3710ff4896"
-dependencies = [
- "darling",
- "heck",
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -1864,7 +1840,7 @@ name = "nft_collection"
 version = "0.1.0"
 dependencies = [
  "near-contract-standards",
- "near-contract-tools 0.4.0",
+ "near-contract-tools",
  "near-sdk",
 ]
 
@@ -1872,11 +1848,15 @@ dependencies = [
 name = "nft_escrow_sc"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "near-contract-standards",
- "near-contract-tools 0.4.0",
+ "near-contract-tools",
  "near-sdk",
+ "near-units",
  "serde",
  "serde_json",
+ "tokio",
+ "workspaces",
 ]
 
 [[package]]

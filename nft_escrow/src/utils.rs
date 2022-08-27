@@ -57,8 +57,8 @@ mod tests {
 
     #[test]
     fn test_sqrt() {
-        assert_eq!(integer_sqrt(0u128), 0.into());
-        assert_eq!(integer_sqrt(4u128), 2.into());
+        assert_eq!(integer_sqrt(0u128), 0u128.into());
+        assert_eq!(integer_sqrt(4u128), 2u128.into());
         assert_eq!(
             integer_sqrt(1_516_156_330_329u128),
             1_231_323u128

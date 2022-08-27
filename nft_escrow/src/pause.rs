@@ -30,11 +30,6 @@ impl Contract {
     }
 
     pub(crate) fn assert_not_paused(&self) {
-        assert_eq!(
-            self.state,
-            RunningState::Running,
-            "{}",
-            ERR30_PAUSED
-        );
+        assert_eq!(self.state, RunningState::Running, "{}", ERR30_PAUSED);
     }
 }

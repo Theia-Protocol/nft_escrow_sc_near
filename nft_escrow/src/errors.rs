@@ -20,8 +20,7 @@ pub const ERR10_NOT_ACTIVATED: &str = "E10: Escrow is not activated";
 pub const ERR11_NOT_ONGOING: &str = "E11: Escrow is not in ongoing state";
 pub const ERR12_NOT_OVER_FUNDING_TARGET: &str = "E12: Escrow is not reached to funding threshold";
 pub const ERR13_IN_BUFFER_PERIOD: &str = "E13: Escrow is in buffer period";
-pub const ERR14_OVER_CONVERSION_PERIOD: &str = "E14: Escrow is outside of conversion period";
-pub const ERR15_NOT_OVER_CONVERSION_PERIOD: &str = "E15: Escrow is not over conversion period";
+pub const ERR14_NOT_OVER_CONVERSION_PERIOD: &str = "E14: Escrow is not over conversion period";
 
 // Owner errors
 pub const ERR20_NOT_ALLOW: &str = "E20: The action is allowed by only owner";
