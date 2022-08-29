@@ -38,7 +38,6 @@ async fn init(
     let bob = worker.dev_create_account().await?;
     let finder = worker.dev_create_account().await?;
     let treasury = worker.dev_create_account().await?;
-    log_str(format!("{}, {}, {}", owner.id(), alice.id(), bob.id()).as_str());
 
     let stable_coin_contract = worker.dev_deploy(FUNGIBLE_TOKEN_CODE).await?;
     let res = stable_coin_contract
@@ -74,13 +73,15 @@ async fn test_active_nft_project() -> anyhow::Result<()> {
     let worker = workspaces::sandbox().await?;
     let (contract, _, owner, _, _, finder, _) = init(&worker).await?;
 
-    let res = owner
-        .call(&worker, contract.id(), "active_nft_project".into())
-        .args_json((NAME, SYMBOL, NFT_BASE_URI, NFT_BLANK_URI, NFT_MAX_SUPPLY, finder.id(), PRE_MINT_AMOUNT, FUND_THRESHOLD, ONE_DAY, TWO_DAYS))?
-        .max_gas()
-        .transact()
-        .await?;
-    assert!(res.is_success());
+    log_str(format!("owner: {}", owner.id()).as_str());
+
+    // let res = owner
+    //     .call(&worker, contract.id(), "active_nft_project".into())
+    //     .args_json((NAME, SYMBOL, NFT_BASE_URI, NFT_BLANK_URI, NFT_MAX_SUPPLY, finder.id(), PRE_MINT_AMOUNT, FUND_THRESHOLD, ONE_DAY, TWO_DAYS))?
+    //     .max_gas()
+    //     .transact()
+    //     .await?;
+    // assert!(res.is_success());
 
     Ok(())
 }

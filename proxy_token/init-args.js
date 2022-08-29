@@ -9,6 +9,5 @@ const name = "Proxy NFT 1";
 const symbol = "PNT";
 const blank_media_uri = "https://ipfs.io/ipfs/QmV33AikTkQqS6vYokx9kafzCme84RsKpwZxPnV4SwC4xj";
 const max_supply = 30;
-const description = "Proxy Non fungible token"
 
-console.log(JSON.stringify({owner_id, name, symbol, blank_media_uri, max_supply, description}));
+console.log(JSON.stringify({owner_id, name, symbol, blank_media_uri, max_supply}));

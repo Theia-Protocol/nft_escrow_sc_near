@@ -17,4 +17,4 @@ near-units = "0.2.0"
 tokio = "1.20.1"
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib"]

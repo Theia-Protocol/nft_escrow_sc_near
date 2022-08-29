@@ -7,9 +7,7 @@ const ONE_NEAR = BigInt(1e12) ** 2n;
 const owner_id = "hosokawa.testnet";
 const name = "NFT Collection 1";
 const symbol = "NCC";
-const base_uri = "https://ipfs.io/ipfs/QmV33AikTkQqS6vYokx9kafzCme84RsKpwZxPnV4SwC4xj/";
+const base_uri = "https://gateway.pinata.cloud/ipfs/QmatVxVUBWiM2vJp5z5m9aWeyP4hpphjHTRArSgEjomseE";
 const max_supply = 30;
-const media_base_uri = "https://ipfs.io/ipfs/QmV33AikTkQqS6vYokx9kafzCme84RsKpwZxPnV4SwC4xj/";
-const description = "Real Non fungible token collection";
 
-console.log(JSON.stringify({owner_id, name, symbol, base_uri, max_supply, media_base_uri, description}));
+console.log(JSON.stringify({owner_id, name, symbol, base_uri, max_supply}));

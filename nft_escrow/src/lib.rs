@@ -8,45 +8,12 @@ mod pause;
 
 use near_contract_standards::non_fungible_token::TokenId;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::serde::{Deserialize, Serialize};
-use near_sdk::{env, near_bindgen, AccountId, Balance, PanicOnDefault, Promise, Gas, PromiseError};
+use near_sdk::{env, near_bindgen, AccountId, Balance, PanicOnDefault, Promise, Gas, PromiseError, PromiseOrValue, is_promise_success};
 use near_sdk::json_types::U128;
+use near_units::parse_gas;
+use serde_json::to_vec;
 use crate::errors::*;
-use crate::utils::{FEE_DIVISOR, GAS_FOR_FT_TRANSFER, ext_self, ext_fungible_token, ext_nft_collection, ext_proxy_token};
-
-
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
-#[serde(crate = "near_sdk::serde")]
-pub enum RunningState {
-    Running,
-    Paused,
-}
-
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Eq, PartialEq, Clone)]
-#[serde(crate = "near_sdk::serde")]
-#[cfg_attr(not(target_arch = "wasm32"), derive(Debug))]
-pub enum ProjectTokenType {
-    NonFungible,
-    Fungible,
-}
-
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
-#[serde(crate = "near_sdk::serde")]
-pub enum CurveType {
-    Horizontal,
-    Linear,
-    Sigmoidal,
-}
-
-
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, PartialEq, Clone, Debug)]
-#[serde(crate = "near_sdk::serde")]
-pub struct CurveArgs {
-    pub arg_a: Option<u128>,
-    pub arg_b: Option<u128>,
-    pub arg_c: Option<u128>,
-    pub arg_d: Option<u128>,
-}
+use crate::utils::*;
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
@@ -97,9 +64,14 @@ pub struct Contract {
     is_closed: bool,
 }
 
-const MIN_STORAGE: Balance = 1_100_000_000_000_000_000_000_000;
 //1.1Ⓝ
+const MIN_STORAGE: Balance = 1_100_000_000_000_000_000_000_000;
 const TGAS: u64 = 1_000_000_000_000;
+const GAS_NON_FUNGIBLE_TOKEN_NEW: Gas = Gas(parse_gas!("20 Tgas") as u64);
+const GAS_FUNGIBLE_TOKEN_NEW: Gas = Gas(parse_gas!("20 Tgas") as u64);
+const GAS_PROXY_TOKEN_NEW: Gas = Gas(parse_gas!("50 Tgas") as u64);
+const GAS_PROXY_TOKEN_MINT: Gas = Gas(parse_gas!("50 Tgas") as u64);
+const NO_DEPOSIT: Balance = 0u128;
 
 const PROXY_TOKEN_CODE: &[u8] = include_bytes!("../../target/wasm32-unknown-unknown/release/proxy_token.wasm");
 const NFT_COLLECTION_CODE: &[u8] = include_bytes!("../../target/wasm32-unknown-unknown/release/nft_collection.wasm");
@@ -139,13 +111,13 @@ impl Contract {
     }
 
     /// Active NFT project
-    pub fn active_nft_project(&mut self, name: String, symbol: String, uri_prefix: String, blank_uri: String, max_supply: Balance, finder_id: AccountId, pre_mint_amount: Balance, fund_threshold: Balance, buffer_period: u64, conversion_period: u64) -> Promise {
+    pub fn active_nft_project(&mut self, name: String, symbol: String, base_uri: String, blank_media_uri: String, max_supply: Balance, finder_id: AccountId, pre_mint_amount: Balance, fund_threshold: Balance, buffer_period: u64, conversion_period: u64) -> Promise {
         self.assert_owner();
         assert_eq!(self.is_closed, false, "{}", ERR013_ALREADY_CLOSED);
         assert!(name.len() > 2, "{}", ERR00_INVALID_NAME);
         assert!(symbol.len() < 13 && symbol.len() > 2, "{}", ERR01_INVALID_SYMBOL);
-        assert!(uri_prefix.len() > 0, "{}", ERR02_INVALID_COLLECTION_BASE_URI);
-        assert!(blank_uri.len() > 0, "{}", ERR03_INVALID_BLANK_URI);
+        assert!(base_uri.len() > 0, "{}", ERR02_INVALID_COLLECTION_BASE_URI);
+        assert!(blank_media_uri.len() > 0, "{}", ERR03_INVALID_BLANK_URI);
         assert!(max_supply > 0, "{}", ERR04_INVALID_MAX_SUPPLY);
         assert!(fund_threshold > 0, "{}", ERR05_INVALID_FUNDING_TARGET);
         assert!(conversion_period >= 86400, "{}", ERR06_INVALID_CONVERSION_PERIOD);
@@ -158,53 +130,27 @@ impl Contract {
         self.start_timestamp = env::block_timestamp();
         self.project_token_type = ProjectTokenType::NonFungible;
 
-        let project_token_id = name.clone() + "." + &env::current_account_id().to_string();
-        let proxy_token_id = "P".to_owned() + &name + "." + &env::current_account_id().to_string();
-        self.proxy_token_id = Some(proxy_token_id);
-        self.project_token_id = Some(project_token_id);
+        let project_token_id = AccountId::try_from(name.clone() + "." + &env::current_account_id().to_string()).expect("The project token account ID is invalid");
+        let proxy_token_id = AccountId::try_from("P".to_owned() + &name + "." + &env::current_account_id().to_string()).expect("The proxy token account ID is invalid");
 
         // deploy non-fungible token
-        Promise::new(self.project_token_id.clone().unwrap())
+        let project_token_promise = Promise::new(project_token_id.clone())
             .create_account()
             .transfer(MIN_STORAGE)
             .deploy_contract(NFT_COLLECTION_CODE.to_vec())
-            .then(
-                // initialize non-fungible token
-                ext_nft_collection::ext(self.project_token_id.clone().unwrap())
-                    .with_static_gas(Gas(5 * TGAS))
-                    .new(
-                        name.clone(),
-                        symbol.clone(),
-                        uri_prefix,
-                        max_supply,
-                    )
-                    .then(
-                        // deploy proxy token
-                        Promise::new(self.proxy_token_id.clone().unwrap())
-                            .create_account()
-                            .transfer(MIN_STORAGE)
-                            .deploy_contract(PROXY_TOKEN_CODE.to_vec())
-                            .then(
-                                // initialize proxy token
-                                ext_proxy_token::ext(self.proxy_token_id.clone().unwrap())
-                                    .with_static_gas(Gas(5 * TGAS)).new(
-                                    name,
-                                    symbol,
-                                    blank_uri,
-                                    max_supply,
-                                )
-                                    .then(
-                                        // mint proxy token
-                                        ext_proxy_token::ext(self.proxy_token_id.clone().unwrap())
-                                            .with_static_gas(Gas(5 * TGAS))
-                                            .mt_mint(
-                                                self.owner_id.clone(),
-                                                pre_mint_amount,
-                                            )
-                                    )
-                            )
-                    )
-            )
+            .function_call("new".to_string(), to_vec(&NonFungibleTokenArgs { owner_id: env::current_account_id(), name: name.clone(), symbol: symbol.clone(), base_uri, max_supply }).unwrap(), NO_DEPOSIT, GAS_NON_FUNGIBLE_TOKEN_NEW);
+
+        // deploy proxy token
+        let proxy_token_promise = Promise::new(proxy_token_id.clone())
+            .create_account()
+            .transfer(MIN_STORAGE)
+            .deploy_contract(PROXY_TOKEN_CODE.to_vec())
+            .function_call("new".to_string(), to_vec(&ProxyTokenArgs { owner_id: env::current_account_id(), name, symbol, blank_media_uri, max_supply }).unwrap(), NO_DEPOSIT, GAS_PROXY_TOKEN_NEW)
+            .function_call("mt_mint".to_string(), to_vec(&ProxyTokenMintArgs { receiver_id: self.owner_id.clone(), amount: pre_mint_amount }).unwrap(), NO_DEPOSIT, GAS_PROXY_TOKEN_MINT);
+
+        project_token_promise.and(proxy_token_promise).then(
+            ext_self::ext(env::current_account_id()).on_activate(project_token_id, proxy_token_id, env::attached_deposit(), env::predecessor_account_id())
+        )
     }
 
     /// Active FT project
@@ -226,49 +172,49 @@ impl Contract {
         self.start_timestamp = env::block_timestamp();
         self.project_token_type = ProjectTokenType::Fungible;
 
+        let project_token_id = AccountId::try_from(name.clone() + "." + &env::current_account_id().to_string()).expect("The project token account ID is invalid");
+        let proxy_token_id = AccountId::try_from("P".to_owned() + &name + "." + &env::current_account_id().to_string()).expect("The proxy token account ID is invalid");
+
         // deploy fungible token
-        Promise::new(self.project_token_id.clone().unwrap())
+        let project_token_promise = Promise::new(project_token_id.clone())
             .create_account()
             .transfer(MIN_STORAGE)
             .deploy_contract(FUNGIBLE_TOKEN_CODE.to_vec())
-            .then(
-                // initialize fungible token
-                ext_fungible_token::ext(self.project_token_id.clone().unwrap())
-                    .with_static_gas(Gas(5 * TGAS))
-                    .new(
-                        name.clone(),
-                        symbol.clone(),
-                    )
-                    .then(
-                        // deploy proxy token
-                        Promise::new(self.proxy_token_id.clone().unwrap())
-                            .create_account()
-                            .transfer(MIN_STORAGE)
-                            .deploy_contract(PROXY_TOKEN_CODE.to_vec())
-                            .then(
-                                // initialize proxy token
-                                ext_proxy_token::ext(self.proxy_token_id.clone().unwrap())
-                                    .with_static_gas(Gas(5 * TGAS))
-                                    .new(
-                                        name,
-                                        symbol,
-                                        blank_uri,
-                                        max_supply,
-                                    )
-                                    .then(
-                                        // pre-mint proxy token to owner
-                                        ext_proxy_token::ext(self.proxy_token_id.clone().unwrap())
-                                            .with_static_gas(Gas(5 * TGAS))
-                                            .mt_mint(
-                                                self.owner_id.clone(),
-                                                pre_mint_amount,
-                                            )
-                                    )
-                            )
-                    )
-            )
+            .function_call("new".to_string(), to_vec(&FungibleTokenArgs { owner_id: env::current_account_id(), name: name.clone(), symbol: symbol.clone() }).unwrap(), NO_DEPOSIT, GAS_FUNGIBLE_TOKEN_NEW);
+
+        // deploy proxy token
+        let proxy_token_promise = Promise::new(proxy_token_id.clone())
+            .create_account()
+            .transfer(MIN_STORAGE)
+            .deploy_contract(PROXY_TOKEN_CODE.to_vec())
+            .function_call("new".to_string(), to_vec(&ProxyTokenArgs { owner_id: env::current_account_id(), name, symbol, blank_media_uri: blank_uri, max_supply }).unwrap(), NO_DEPOSIT, GAS_PROXY_TOKEN_NEW)
+            .function_call("mt_mint".to_string(), to_vec(&ProxyTokenMintArgs { receiver_id: self.owner_id.clone(), amount: pre_mint_amount }).unwrap(), NO_DEPOSIT, GAS_PROXY_TOKEN_MINT);
+
+        project_token_promise.and(proxy_token_promise).then(
+            ext_self::ext(env::current_account_id()).on_activate(project_token_id, proxy_token_id, env::attached_deposit(), env::predecessor_account_id())
+        )
     }
 
+    /// Callback after project token was created
+    #[private]
+    pub fn on_activate(
+        &mut self,
+        project_token_id: AccountId,
+        proxy_token_id: AccountId,
+        attached_deposit: U128,
+        predecessor_account_id: AccountId,
+    ) -> PromiseOrValue<bool> {
+        if is_promise_success() {
+            self.project_token_id = Some(project_token_id);
+            self.proxy_token_id = Some(proxy_token_id);
+            PromiseOrValue::Value(true)
+        } else {
+            Promise::new(predecessor_account_id).transfer(attached_deposit.0);
+            PromiseOrValue::Value(false)
+        }
+    }
+
+    /// buy proxy token
     pub fn buy(&mut self, amount: Balance, coin_amount: Balance) -> Promise {
         self.assert_not_paused();
         self.assert_is_ongoing();
@@ -321,6 +267,7 @@ impl Contract {
             )
     }
 
+    /// sell proxy token
     pub fn sell(&mut self, token_ids: Vec<TokenId>) -> Promise {
         self.assert_not_paused();
         self.assert_is_ongoing();
@@ -349,6 +296,7 @@ impl Contract {
             )
     }
 
+    /// convert proxy token to real token
     pub fn convert(&mut self, token_ids: Vec<TokenId>) -> Promise {
         self.assert_not_paused();
         self.assert_is_after_buffer_period();
@@ -373,19 +321,20 @@ impl Contract {
         let convert_callback =
             ext_self::ext(env::current_account_id())
                 .with_static_gas(Gas(5 * TGAS))
-                .convert_callback(token_ids.len() as Balance);
+                .on_convert(token_ids.len() as Balance);
 
         convert_project_token.then(burn_proxy).then(convert_callback)
     }
 
     #[private]
-    pub fn convert_callback(&mut self, converted_amount: Balance, #[callback_result] call_result: Result<(), PromiseError>) {
+    pub fn on_convert(&mut self, converted_amount: Balance, #[callback_result] call_result: Result<(), PromiseError>) {
         if call_result.is_err() {
             env::panic_str(ERR014_CONVERT_FAILED);
         }
         self.converted_proxy_token_amount = self.converted_proxy_token_amount.checked_add(converted_amount).unwrap();
     }
 
+    /// claim fund
     pub fn claim_fund(&mut self, to: AccountId, amount: u128) -> Promise {
         self.assert_owner();
         self.assert_is_after_conversion_period();
@@ -413,6 +362,7 @@ impl Contract {
         fund_transfer.then(finder_fee_transfer)
     }
 
+    /// close project
     pub fn close_project(&mut self) -> Promise {
         self.assert_owner();
         assert!(
@@ -437,7 +387,7 @@ impl Contract {
         let close_project_callback =
             ext_self::ext(env::current_account_id())
                 .with_static_gas(Gas(5 * TGAS))
-                .close_project_callback();
+                .on_close_project();
 
         if self.pre_mint_amount > 0 {
             let pre_mint = self.internal_project_token_mint(self.owner_id.clone(), self.pre_mint_amount);
@@ -455,7 +405,7 @@ impl Contract {
     }
 
     #[private]
-    pub fn close_project_callback(&mut self, #[callback_result] call_result: Result<(), PromiseError>) {
+    pub fn on_close_project(&mut self, #[callback_result] call_result: Result<(), PromiseError>) {
         if call_result.is_err() {
             env::panic_str(ERR012_CLOSE_PROJECT_FAILED);
         }

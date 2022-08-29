@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-WASM_PATH="$(find ./target/wasm32-unknown-unknown/release/ -maxdepth 1 -name "*.wasm")"
+WASM_PATH="../target/wasm32-unknown-unknown/release/ft_token.wasm"
 
 near dev-deploy \
   --wasmFile $WASM_PATH \

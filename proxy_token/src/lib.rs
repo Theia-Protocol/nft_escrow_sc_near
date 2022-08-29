@@ -32,9 +32,7 @@ pub struct Contract {
 
     max_supply: u128,
 
-    blank_media_uri: String,
-
-    description: String,
+    blank_media_uri: String
 }
 
 #[derive(BorshSerialize, BorshStorageKey)]
@@ -49,7 +47,7 @@ enum StorageKey {
 impl Contract {
     /// Initializes the contract owned by `owner_id` with nft metadata
     #[init]
-    pub fn new(owner_id: AccountId, name: String, symbol: String, blank_media_uri: String, max_supply: u128, description: String ) -> Self {
+    pub fn new(owner_id: AccountId, name: String, symbol: String, blank_media_uri: String, max_supply: u128) -> Self {
         assert!(!env::state_exists(), "Already initialized");
         let metadata = MtContractMetadata {
             spec: MT_METADATA_SPEC.to_string(),
@@ -69,8 +67,7 @@ impl Contract {
             all_total_supply: 0,
             metadata: LazyOption::new(StorageKey::Metadata, Some(&metadata)),
             max_supply,
-            blank_media_uri,
-            description,
+            blank_media_uri
         }
     }
 
@@ -185,7 +182,7 @@ impl Contract {
     pub fn mt_token(&self, token_id: TokenId) -> Option<Token> {
         let metadata = TokenMetadata {
             title: Some(token_id.clone()),
-            description: Some(self.description.clone()),
+            description: None,
             media: Some(self.blank_media_uri.clone()),
             media_hash: None,
             issued_at: None,
@@ -276,8 +273,7 @@ mod tests {
             String::from("Test Proxy NFT"),
             String::from("TPN"),
             String::from("https://ipfs.io/ipfs/QmXa5nrfaqrvvcYFeEvs8E9W7AAeCZeUAuN6jophN9y8Ds/"),
-            100,
-            String::from("")
+            100
         );
 
         // mint

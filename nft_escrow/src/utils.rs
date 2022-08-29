@@ -1,16 +1,91 @@
 use near_contract_standards::non_fungible_token::TokenId;
-use near_sdk::{ext_contract, AccountId, Gas, Balance};
+use near_sdk::{ext_contract, AccountId, Gas, Balance, PromiseOrValue};
 use near_sdk::json_types::{U128};
+use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
+use near_sdk::serde::{Deserialize, Serialize};
 
 /// Fee divisor, allowing to provide fee in bps.
 pub const FEE_DIVISOR: u32 = 10_000;
 /// Amount of gas for fungible token transfers.
 pub const GAS_FOR_FT_TRANSFER: Gas = Gas::ONE_TERA;
 
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
+#[serde(crate = "near_sdk::serde")]
+pub enum RunningState {
+    Running,
+    Paused,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
+#[serde(crate = "near_sdk::serde")]
+pub enum ProjectTokenType {
+    NonFungible,
+    Fungible,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
+#[serde(crate = "near_sdk::serde")]
+pub enum CurveType {
+    Horizontal,
+    Linear,
+    Sigmoidal,
+}
+
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, PartialEq, Clone, Debug)]
+#[serde(crate = "near_sdk::serde")]
+pub struct CurveArgs {
+    pub arg_a: Option<u128>,
+    pub arg_b: Option<u128>,
+    pub arg_c: Option<u128>,
+    pub arg_d: Option<u128>,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, PartialEq, Clone, Debug)]
+#[serde(crate = "near_sdk::serde")]
+pub struct FungibleTokenArgs {
+    pub owner_id: AccountId,
+    pub name: String,
+    pub symbol: String
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, PartialEq, Clone, Debug)]
+#[serde(crate = "near_sdk::serde")]
+pub struct NonFungibleTokenArgs {
+    pub owner_id: AccountId,
+    pub name: String,
+    pub symbol: String,
+    pub base_uri: String,
+    pub max_supply: u128
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, PartialEq, Clone, Debug)]
+#[serde(crate = "near_sdk::serde")]
+pub struct ProxyTokenArgs {
+    pub owner_id: AccountId,
+    pub name: String,
+    pub symbol: String,
+    pub blank_media_uri: String,
+    pub max_supply: u128
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, PartialEq, Clone, Debug)]
+#[serde(crate = "near_sdk::serde")]
+pub struct ProxyTokenMintArgs {
+    pub receiver_id: AccountId,
+    pub amount: u128
+}
 #[ext_contract(ext_self)]
 pub trait SelfCallbacks {
-    fn convert_callback(&mut self, converted_amount: Balance);
-    fn close_project_callback(&mut self);
+    fn on_activate(
+        &mut self,
+        project_token_id: AccountId,
+        proxy_token_id: AccountId,
+        attached_deposit: u128,
+        predecessor_account_id: AccountId
+    ) -> PromiseOrValue<bool>;
+    fn on_convert(&mut self, converted_amount: Balance);
+    fn on_close_project(&mut self);
 }
 
 #[ext_contract(ext_nft_collection)]

@@ -15,9 +15,7 @@ pub struct Contract {
     tokens: NonFungibleToken,
     metadata: LazyOption<NFTContractMetadata>,
     current_index: u128,
-    max_supply: u128,
-    json_base_uri: String,
-    description: String,
+    max_supply: u128
 }
 
 #[derive(BorshSerialize, BorshStorageKey)]
@@ -33,14 +31,14 @@ enum StorageKey {
 impl Contract {
     /// Initializes the contract owned by `owner_id` with nft metadata
     #[init]
-    pub fn new(owner_id: AccountId, name: String, symbol: String, media_base_uri: String, max_supply: u128, json_base_uri: String, description: String ) -> Self {
+    pub fn new(owner_id: AccountId, name: String, symbol: String, base_uri: String, max_supply: u128) -> Self {
         assert!(!env::state_exists(), "Already initialized");
         let metadata = NFTContractMetadata {
             spec: NFT_METADATA_SPEC.to_string(),
             name,
             symbol,
             icon: None,
-            base_uri: Some(media_base_uri),
+            base_uri: Some(base_uri),
             reference: None,
             reference_hash: None,
         };
@@ -55,9 +53,7 @@ impl Contract {
             ),
             metadata: LazyOption::new(StorageKey::Metadata, Some(&metadata)),
             current_index: 0u128,
-            max_supply,
-            json_base_uri,
-            description,
+            max_supply
         }
     }
 
@@ -77,30 +73,23 @@ impl Contract {
         let mut i = 0;
 
         while i < amount {
-            let mut title = "#".to_string();
-            title.push_str(&i.to_string());
-
-            let mut media_uri: String = self.metadata.get().unwrap().base_uri.unwrap().clone();
-            media_uri.push_str(&i.to_string());
-            media_uri.push_str(".json");
-
-            let mut json_uri = self.json_base_uri.clone();
-            json_uri.push_str(&i.to_string());
-            json_uri.push_str(".json");
+            let title = Some(format!("{} #{}", self.metadata.get().unwrap().name, i.to_string()));
+            let media = Some(i.to_string());
+            let reference = Some(format!("{}.json", i.to_string()));
 
             let token_id: TokenId = (self.current_index + i).to_string();
             let token_metadata = TokenMetadata {
-                title: Some(title),
-                description: Some(self.description.clone()),
-                media: Some(media_uri),
+                title,
+                description: None,
+                media,
                 media_hash: None,
-                copies: None,
-                issued_at: None,
+                copies: Some(1u64),
+                issued_at: Some(env::block_timestamp().to_string()),
                 expires_at: None,
                 starts_at: None,
                 updated_at: None,
                 extra: None,
-                reference: Some(json_uri),
+                reference,
                 reference_hash: None
             };
             let token: Token = self.tokens.internal_mint(token_id.to_string(), receiver_id.clone(), Some(token_metadata));
@@ -155,9 +144,7 @@ mod tests {
             String::from("Test FT"),
             String::from("TFT"),
             String::from("https://ipfs.io/ipfs/QmXa5nrfaqrvvcYFeEvs8E9W7AAeCZeUAuN6jophN9y8Ds/"),
-            100,
-            String::from("https://ipfs.io/ipfs/QmXa5nrfaqrvvcYFeEvs8E9W7AAeCZeUAuN6jophN9y8Ds/"),
-            String::from("")
+            100
         );
 
         // mint
