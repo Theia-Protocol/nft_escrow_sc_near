@@ -8,6 +8,7 @@ use near_sdk::collections::LazyOption;
 use near_sdk::{
     env, near_bindgen, AccountId, BorshStorageKey, PanicOnDefault, Promise, PromiseOrValue,
 };
+use near_sdk::json_types::U128;
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
@@ -31,7 +32,7 @@ enum StorageKey {
 impl Contract {
     /// Initializes the contract owned by `owner_id` with nft metadata
     #[init]
-    pub fn new(owner_id: AccountId, name: String, symbol: String, base_uri: String, max_supply: u128) -> Self {
+    pub fn new(owner_id: AccountId, name: String, symbol: String, base_uri: String, max_supply: U128) -> Self {
         assert!(!env::state_exists(), "Already initialized");
         let metadata = NFTContractMetadata {
             spec: NFT_METADATA_SPEC.to_string(),
@@ -53,7 +54,7 @@ impl Contract {
             ),
             metadata: LazyOption::new(StorageKey::Metadata, Some(&metadata)),
             current_index: 0u128,
-            max_supply
+            max_supply: max_supply.0
         }
     }
 
@@ -63,16 +64,16 @@ impl Contract {
     pub fn nft_mint(
         &mut self,
         receiver_id: AccountId,
-        amount: u128,
+        amount: U128,
     ) -> Vec<Token> {
-        assert!(amount > 0, "Invalid amount");
-        assert!(self.current_index.checked_add(amount).unwrap() < self.max_supply, "OverMaxSupply");
+        assert!(amount.0 > 0, "Invalid amount");
+        assert!(self.current_index.checked_add(amount.0).unwrap() < self.max_supply, "OverMaxSupply");
         assert_eq!(env::predecessor_account_id(), self.tokens.owner_id, "Unauthorized");
 
         let mut tokens: Vec<Token> = vec![];
         let mut i = 0;
 
-        while i < amount {
+        while i < amount.0 {
             let title = Some(format!("{} #{}", self.metadata.get().unwrap().name, i.to_string()));
             let media = Some(i.to_string());
             let reference = Some(format!("{}.json", i.to_string()));
@@ -96,7 +97,7 @@ impl Contract {
             tokens.push(token);
             i += 1;
         }
-        self.current_index += amount;
+        self.current_index += amount.0;
         tokens
     }
 }
@@ -144,7 +145,7 @@ mod tests {
             String::from("Test FT"),
             String::from("TFT"),
             String::from("https://ipfs.io/ipfs/QmXa5nrfaqrvvcYFeEvs8E9W7AAeCZeUAuN6jophN9y8Ds/"),
-            100
+            U128::from(100)
         );
 
         // mint

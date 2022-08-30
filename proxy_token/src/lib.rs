@@ -2,6 +2,7 @@ use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::{LazyOption, LookupMap, UnorderedMap};
 use near_sdk::{env, near_bindgen, AccountId, Balance, BorshStorageKey, PanicOnDefault, StorageUsage};
 use near_contract_standards::non_fungible_token::refund_deposit_to_account;
+use near_sdk::json_types::U128;
 use crate::event::{MtBurn, MtMint};
 use crate::metadata::{MT_METADATA_SPEC, MtContractMetadata, TokenMetadata};
 use crate::token::{Token, TokenId};
@@ -47,7 +48,7 @@ enum StorageKey {
 impl Contract {
     /// Initializes the contract owned by `owner_id` with nft metadata
     #[init]
-    pub fn new(owner_id: AccountId, name: String, symbol: String, blank_media_uri: String, max_supply: u128) -> Self {
+    pub fn new(owner_id: AccountId, name: String, symbol: String, blank_media_uri: String, max_supply: U128) -> Self {
         assert!(!env::state_exists(), "Already initialized");
         let metadata = MtContractMetadata {
             spec: MT_METADATA_SPEC.to_string(),
@@ -66,7 +67,7 @@ impl Contract {
             balances_per_token: UnorderedMap::new(StorageKey::Balances),
             all_total_supply: 0,
             metadata: LazyOption::new(StorageKey::Metadata, Some(&metadata)),
-            max_supply,
+            max_supply: max_supply.0,
             blank_media_uri
         }
     }
@@ -77,17 +78,17 @@ impl Contract {
     pub fn mt_mint(
         &mut self,
         receiver_id: AccountId,
-        amount: u128,
+        amount: U128,
     ) -> Vec<TokenId> {
-        assert!(amount > 0, "Invalid amount");
-        assert!(self.all_total_supply.checked_add(amount).unwrap() < self.max_supply, "OverMaxSupply");
+        assert!(amount.0 > 0, "Invalid amount");
+        assert!(self.all_total_supply.checked_add(amount.0).unwrap() < self.max_supply, "OverMaxSupply");
         assert_eq!(env::predecessor_account_id(), self.owner_id, "Unauthorized");
 
         let mut token_ids: Vec<TokenId> = vec![];
         let mut i = 0;
         let refund_id = Some(env::predecessor_account_id());
 
-        while i < amount {
+        while i < amount.0 {
 
             // Remember current storage usage if refund_id is Some
             let initial_storage_usage = refund_id.as_ref().map(|account_id| (account_id, env::storage_usage()));
@@ -131,7 +132,7 @@ impl Contract {
             }
                 .emit();
         }
-        self.all_total_supply = self.all_total_supply.checked_add(amount).unwrap();
+        self.all_total_supply = self.all_total_supply.checked_add(amount.0).unwrap();
 
         token_ids
     }
@@ -273,7 +274,7 @@ mod tests {
             String::from("Test Proxy NFT"),
             String::from("TPN"),
             String::from("https://ipfs.io/ipfs/QmXa5nrfaqrvvcYFeEvs8E9W7AAeCZeUAuN6jophN9y8Ds/"),
-            100
+            U128::from(100u128)
         );
 
         // mint

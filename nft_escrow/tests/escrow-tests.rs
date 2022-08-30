@@ -67,21 +67,34 @@ async fn init(
     Ok((escrow_contract, stable_coin_contract, owner, alice, bob, finder, treasury))
 }
 
-
 #[tokio::test]
 async fn test_active_nft_project() -> anyhow::Result<()> {
     let worker = workspaces::sandbox().await?;
     let (contract, _, owner, _, _, finder, _) = init(&worker).await?;
 
-    log_str(format!("owner: {}", owner.id()).as_str());
+    let res = owner
+        .call(&worker, contract.id(), "active_nft_project".into())
+        .args_json((NAME, SYMBOL, NFT_BASE_URI, NFT_BLANK_URI, NFT_MAX_SUPPLY, finder.id(), PRE_MINT_AMOUNT, FUND_THRESHOLD, ONE_DAY, TWO_DAYS))?
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(res.is_success());
 
-    // let res = owner
-    //     .call(&worker, contract.id(), "active_nft_project".into())
-    //     .args_json((NAME, SYMBOL, NFT_BASE_URI, NFT_BLANK_URI, NFT_MAX_SUPPLY, finder.id(), PRE_MINT_AMOUNT, FUND_THRESHOLD, ONE_DAY, TWO_DAYS))?
-    //     .max_gas()
-    //     .transact()
-    //     .await?;
-    // assert!(res.is_success());
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_active_ft_project() -> anyhow::Result<()> {
+    let worker = workspaces::sandbox().await?;
+    let (contract, _, owner, _, _, finder, _) = init(&worker).await?;
+
+    let res = owner
+        .call(&worker, contract.id(), "active_ft_project".into())
+        .args_json((NAME, SYMBOL, NFT_BLANK_URI, NFT_MAX_SUPPLY, finder.id(), PRE_MINT_AMOUNT, FUND_THRESHOLD, ONE_DAY, TWO_DAYS))?
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(res.is_success());
 
     Ok(())
 }

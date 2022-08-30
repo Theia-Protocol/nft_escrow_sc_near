@@ -56,7 +56,7 @@ pub struct NonFungibleTokenArgs {
     pub name: String,
     pub symbol: String,
     pub base_uri: String,
-    pub max_supply: u128
+    pub max_supply: U128
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, PartialEq, Clone, Debug)]
@@ -66,14 +66,14 @@ pub struct ProxyTokenArgs {
     pub name: String,
     pub symbol: String,
     pub blank_media_uri: String,
-    pub max_supply: u128
+    pub max_supply: U128
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, PartialEq, Clone, Debug)]
 #[serde(crate = "near_sdk::serde")]
 pub struct ProxyTokenMintArgs {
     pub receiver_id: AccountId,
-    pub amount: u128
+    pub amount: U128
 }
 #[ext_contract(ext_self)]
 pub trait SelfCallbacks {
@@ -81,7 +81,7 @@ pub trait SelfCallbacks {
         &mut self,
         project_token_id: AccountId,
         proxy_token_id: AccountId,
-        attached_deposit: u128,
+        attached_deposit: U128,
         predecessor_account_id: AccountId
     ) -> PromiseOrValue<bool>;
     fn on_convert(&mut self, converted_amount: Balance);
