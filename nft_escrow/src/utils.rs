@@ -3,6 +3,8 @@ use near_sdk::{ext_contract, AccountId, Gas, Balance, PromiseOrValue};
 use near_sdk::json_types::{U128};
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::serde::{Deserialize, Serialize};
+use uint::construct_uint;
+
 
 /// Fee divisor, allowing to provide fee in bps.
 pub const FEE_DIVISOR: u32 = 10_000;
@@ -90,8 +92,8 @@ pub trait SelfCallbacks {
 
 #[ext_contract(ext_nft_collection)]
 pub trait NonFungibleToken {
-    fn new(&mut self, name: String, symbol: String, blank_uri: String, max_supply: u128);
-    fn nft_mint(&mut self, receiver_id: AccountId, amount: u128);
+    fn new(&mut self, name: String, symbol: String, blank_uri: String, max_supply: U128);
+    fn nft_mint(&mut self, receiver_id: AccountId, amount: U128);
     fn nft_transfer(&mut self, receiver_id: AccountId, token_id: TokenId, approval_id: Option<u64>, memo: Option<String>);
     fn get_owner(&self) -> AccountId;
     fn set_owner(&mut self, owner_id: AccountId);
@@ -100,7 +102,7 @@ pub trait NonFungibleToken {
 #[ext_contract(ext_fungible_token)]
 pub trait FungibleToken {
     fn new(&mut self, name: String, symbol: String);
-    fn ft_mint(&mut self, receiver_id: AccountId, amount: u128);
+    fn ft_mint(&mut self, receiver_id: AccountId, amount: U128);
     fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>);
     fn get_owner(&self) -> AccountId;
     fn set_owner(&mut self, owner_id: AccountId);
@@ -108,16 +110,21 @@ pub trait FungibleToken {
 
 #[ext_contract(ext_proxy_token)]
 pub trait ProxyToken {
-    fn new(&mut self, name: String, symbol: String, blank_uri: String, max_supply: u128);
-    fn mt_mint(&mut self, receiver_id: AccountId, amount: u128);
+    fn new(&mut self, name: String, symbol: String, blank_uri: String, max_supply: U128);
+    fn mt_mint(&mut self, receiver_id: AccountId, amount: U128);
     fn mt_burn(&mut self, from_id: AccountId, token_ids: Vec<TokenId>);
-    fn mt_burn_with_amount(&mut self, from_id: AccountId, start_id: TokenId, amount: Balance);
+    fn mt_burn_with_amount(&mut self, from_id: AccountId, start_id: TokenId, amount: U128);
     fn mt_all_total_supply(&self);
 }
 
+construct_uint! {
+    /// 256-bit unsigned integer.
+    pub struct U256(4);
+}
+
 /// Newton's method of integer square root.
-pub fn integer_sqrt(value: u128) -> u128 {
-    let mut guess: u128 = (value + 1) >> 1;
+pub fn integer_sqrt(value: U256) -> U256 {
+    let mut guess: U256 = (value + 1) >> 1;
     let mut res = value;
     while guess < res {
         res = guess;
@@ -132,10 +139,10 @@ mod tests {
 
     #[test]
     fn test_sqrt() {
-        assert_eq!(integer_sqrt(0u128), 0u128.into());
-        assert_eq!(integer_sqrt(4u128), 2u128.into());
+        assert_eq!(integer_sqrt(U256::from(0u128)), 0u128.into());
+        assert_eq!(integer_sqrt(U256::from(4u128)), 2u128.into());
         assert_eq!(
-            integer_sqrt(1_516_156_330_329u128),
+            integer_sqrt(U256::from(1_516_156_330_329u128)),
             1_231_323u128
         );
     }

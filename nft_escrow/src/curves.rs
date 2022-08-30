@@ -38,38 +38,23 @@ impl Contract {
             CurveType::Sigmoidal => {
                 // p = A * sqr(C + (x + B)^2) + x * (D + A)
                 let aa = integer_sqrt(
-                    (
-                        (&self).curve_args.arg_c.unwrap()
-                            .checked_add(
-                                to_token_id
-                                    .checked_add(
-                                        (&self).curve_args.arg_b.unwrap()
-                                    )
-                                    .unwrap()
-                                    .checked_pow(2)
-                                    .unwrap()
-                            )
-                            .unwrap()
+                    U256::from(
+                        (&self).curve_args.arg_c.unwrap() + (to_token_id + (&self).curve_args.arg_b.unwrap()).pow(2)
                     )
-                    .checked_mul(
-                        one_coin.checked_pow(2).unwrap()
-                    )
-                    .unwrap()
+                    * U256::from(one_coin)
+                    * U256::from(one_coin)
                 );
                 price = (&self).curve_args.arg_a
                     .unwrap()
-                    .checked_mul(aa)
+                    .checked_mul(aa.as_u128())
                     .unwrap();
                 price = price
                     .checked_add(
                     to_token_id.checked_mul(
-                        (&self).curve_args.arg_d.unwrap()
-                                .checked_add(
-                                    (&self).curve_args.arg_a.unwrap()
-                                )
-                                .unwrap()
+                        (&self).curve_args.arg_d.unwrap() + (&self).curve_args.arg_a.unwrap()
                         )
                         .unwrap()
+                        * one_coin
                     )
                     .unwrap();
             }
@@ -77,16 +62,20 @@ impl Contract {
         price
     }
 
-    pub fn get_token_price(&self, token_id: u128) -> u128 {
-        self.get_sum_price(token_id.checked_add(1).unwrap())
-            .checked_sub(self.get_sum_price(token_id))
+    pub fn get_curve_type(&self) -> CurveType { self.curve_type.clone() }
+
+    pub fn get_curve_args(&self) -> CurveArgs { self.curve_args.clone() }
+
+    pub fn get_token_price(&self, token_id: U128) -> u128 {
+        self.get_sum_price(token_id.0.checked_add(1).unwrap())
+            .checked_sub(self.get_sum_price(token_id.0))
             .unwrap()
     }
 
-    pub fn calculate_buy_proxy_token(&self, amount: Balance) -> u128 {
+    pub fn calculate_buy_proxy_token(&self, amount: U128) -> u128 {
         let circulating_supply = 0u128;
 
-        self.get_sum_price(circulating_supply.checked_add(amount).unwrap())
+        self.get_sum_price(circulating_supply.checked_add(amount.0).unwrap())
             .checked_sub(self.get_sum_price(circulating_supply))
             .unwrap()
     }
@@ -94,7 +83,7 @@ impl Contract {
     pub fn calculate_sell_proxy_token(&self, token_ids: Vec<TokenId>) -> u128 {
         let mut total_price = 0u128;
         token_ids.iter().enumerate().for_each(|(_, token_id) | {
-            total_price = total_price.checked_add(self.get_token_price(token_id.parse().unwrap())).unwrap();
+            total_price = total_price.checked_add(self.get_token_price(U128::from(token_id.parse::<u128>().unwrap()))).unwrap();
         });
 
         total_price

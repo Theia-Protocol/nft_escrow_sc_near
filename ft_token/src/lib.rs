@@ -53,24 +53,24 @@ impl Contract {
         }
     }
 
-    pub fn ft_mint(&mut self, receive_id: AccountId, amount: Balance) {
+    pub fn ft_mint(&mut self, receive_id: AccountId, amount: U128) {
         require!(env::predecessor_account_id() == self.owner_id, "UnAuthorized");
 
-        self.token.internal_deposit(&receive_id, amount);
+        self.token.internal_deposit(&receive_id, amount.0);
         FtMint {
             owner_id: &(receive_id),
-            amount: &U128(amount),
+            amount: &amount,
             memo: None
         }.emit();
     }
 
-    pub fn ft_burn(&mut self, from_id: AccountId, amount: Balance) {
+    pub fn ft_burn(&mut self, from_id: AccountId, amount: U128) {
         require!(env::predecessor_account_id() == self.owner_id, "UnAuthorized");
 
-        self.token.internal_withdraw(&from_id, amount);
+        self.token.internal_withdraw(&from_id, amount.0);
         FtBurn {
             owner_id: &(from_id),
-            amount: &U128(amount),
+            amount: &amount,
             memo: None
         }.emit();
     }

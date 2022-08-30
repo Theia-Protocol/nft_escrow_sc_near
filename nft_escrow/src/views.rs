@@ -30,8 +30,6 @@ impl Contract {
 
     pub fn get_stable_coin_id(&self) -> AccountId { self.stable_coin_id.clone() }
 
-    pub fn get_curve_type(&self) -> CurveType { self.curve_type.clone() }
-
     pub fn get_running_state(&self) -> RunningState { self.state.clone() }
 
     pub fn get_is_closed(&self) -> bool { self.is_closed }

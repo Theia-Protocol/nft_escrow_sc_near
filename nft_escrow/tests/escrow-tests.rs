@@ -1,8 +1,6 @@
 mod helpers;
 
-use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::env::log_str;
-use near_sdk::serde::{Deserialize, Serialize};
+use near_sdk::json_types::U128;
 use serde_json::json;
 use workspaces::prelude::*;
 use workspaces::{Account, Contract, DevNetwork, Worker};
@@ -10,34 +8,18 @@ use helpers::*;
 
 const FUNGIBLE_TOKEN_CODE: &[u8] = include_bytes!("../../target/wasm32-unknown-unknown/release/ft_token.wasm");
 const NFT_ESCROW_CODE: &[u8] = include_bytes!("../../target/wasm32-unknown-unknown/release/nft_escrow_sc.wasm");
-// const PROXY_TOKEN_CODE: &[u8] = include_bytes!("../../target/wasm32-unknown-unknown/release/proxy_token.wasm");
-// const NFT_COLLECTION_CODE: &[u8] = include_bytes!("../../target/wasm32-unknown-unknown/release/nft_collection.wasm");
-
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
-#[serde(crate = "near_sdk::serde")]
-enum CurveType {
-    Horizontal,
-    Linear,
-    Sigmoidal,
-}
-
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, PartialEq, Clone, Debug)]
-#[serde(crate = "near_sdk::serde")]
-struct CurveArgs {
-    pub arg_a: Option<u128>,
-    pub arg_b: Option<u128>,
-    pub arg_c: Option<u128>,
-    pub arg_d: Option<u128>,
-}
 
 async fn init(
     worker: &Worker<impl DevNetwork>
-) -> anyhow::Result<(Contract, Contract, Account, Account, Account, Account, Account)> {
+) -> anyhow::Result<(Contract, Contract, Account, Account, Account, Account, Account, u128)> {
     let owner = worker.dev_create_account().await?;
     let alice = worker.dev_create_account().await?;
     let bob = worker.dev_create_account().await?;
     let finder = worker.dev_create_account().await?;
     let treasury = worker.dev_create_account().await?;
+
+    let stable_coin_decimals = 24u8;
+    let one_coin = 10u128.pow(stable_coin_decimals as u32);
 
     let stable_coin_contract = worker.dev_deploy(FUNGIBLE_TOKEN_CODE).await?;
     let res = stable_coin_contract
@@ -58,42 +40,405 @@ async fn init(
 
     let res = escrow_contract
         .call(&worker, "new")
-        .args_json((owner.id(), stable_coin_contract.id(), 24u8, CurveType::Horizontal, curve_args, treasury.id()))?
+        .args_json((owner.id(), stable_coin_contract.id(), stable_coin_decimals, CurveType::Horizontal, curve_args, treasury.id()))?
         .max_gas()
         .transact()
         .await?;
     assert!(res.is_success());
 
-    Ok((escrow_contract, stable_coin_contract, owner, alice, bob, finder, treasury))
+    Ok((escrow_contract, stable_coin_contract, owner, alice, bob, finder, treasury, one_coin))
 }
 
-#[tokio::test]
-async fn test_active_nft_project() -> anyhow::Result<()> {
-    let worker = workspaces::sandbox().await?;
-    let (contract, _, owner, _, _, finder, _) = init(&worker).await?;
+// #[tokio::test]
+// async fn test_active_nft_project() -> anyhow::Result<()> {
+//     let worker = workspaces::sandbox().await?;
+//     let (contract, _, owner, _, _, finder, _, _) = init(&worker).await?;
+//
+//     let res = owner
+//         .call(&worker, contract.id(), "active_nft_project".into())
+//         .args_json((NAME, SYMBOL, NFT_BASE_URI, NFT_BLANK_URI, NFT_MAX_SUPPLY, finder.id(), PRE_MINT_AMOUNT, FUND_THRESHOLD, ONE_DAY, TWO_DAYS))?
+//         .max_gas()
+//         .transact()
+//         .await?;
+//     assert!(res.is_success());
+//
+//     Ok(())
+// }
+//
+// #[tokio::test]
+// async fn test_active_ft_project() -> anyhow::Result<()> {
+//     let worker = workspaces::sandbox().await?;
+//     let (contract, _, owner, _, _, finder, _, _) = init(&worker).await?;
+//
+//     let res = owner
+//         .call(&worker, contract.id(), "active_ft_project".into())
+//         .args_json((NAME, SYMBOL, NFT_BLANK_URI, NFT_MAX_SUPPLY, finder.id(), PRE_MINT_AMOUNT, FUND_THRESHOLD, ONE_DAY, TWO_DAYS))?
+//         .max_gas()
+//         .transact()
+//         .await?;
+//     assert!(res.is_success());
+//
+//     Ok(())
+// }
+//
+// #[tokio::test]
+// async fn test_auction_curve_horizontal() -> anyhow::Result<()> {
+//     let worker = workspaces::sandbox().await?;
+//     let (_, stable_coin_contract, owner, _, _, finder, treasury, one_coin) = init(&worker).await?;
+//
+//
+//     // deploy
+//     let escrow_contract = worker.dev_deploy(NFT_ESCROW_CODE).await?;
+//     const BASE_TOKEN_PRICE: u128 = 100u128;
+//     let curve_args = CurveArgs {
+//         arg_a: Some(BASE_TOKEN_PRICE),
+//         arg_b: None,
+//         arg_c: None,
+//         arg_d: None,
+//     };
+//
+//     // initialize
+//     escrow_contract
+//         .call(&worker, "new")
+//         .args_json((owner.id(), stable_coin_contract.id(), 24u8, CurveType::Horizontal, &curve_args, treasury.id()))?
+//         .max_gas()
+//         .transact()
+//         .await?;
+//
+//     // active project
+//     owner
+//         .call(&worker, escrow_contract.id(), "active_nft_project")
+//         .args_json((NAME, SYMBOL, NFT_BASE_URI, NFT_BLANK_URI, NFT_MAX_SUPPLY, finder.id(), PRE_MINT_AMOUNT, FUND_THRESHOLD, ONE_DAY, TWO_DAYS))?
+//         .max_gas()
+//         .transact()
+//         .await?;
+//
+//     let curve_type = escrow_contract.call(&worker, "get_curve_type")
+//         .view()
+//         .await?
+//         .json::<CurveType>()?;
+//
+//     assert_eq!(curve_type, CurveType::Horizontal);
+//
+//     let _curve_args = escrow_contract.call(&worker, "get_curve_args")
+//         .view()
+//         .await?
+//         .json::<CurveArgs>()?;
+//
+//     assert_eq!(&_curve_args.arg_a, &curve_args.arg_a);
+//
+//     let mut token_price =
+//         escrow_contract
+//             .view(
+//                 &worker,
+//                 "get_token_price",
+//                 json!({
+//                     "token_id": U128::from(1u128)
+//                 }).to_string().into_bytes(),
+//             )
+//             .await?
+//             .json::<u128>()?;
+//
+//     assert_eq!(token_price / one_coin, BASE_TOKEN_PRICE);
+//
+//     for token_id in 1..10 {
+//         token_price =
+//             escrow_contract
+//                 .view(
+//                     &worker,
+//                     "get_token_price",
+//                     json!({
+//                         "token_id": U128::from(token_id as u128)
+//                     }).to_string().into_bytes(),
+//                 )
+//                 .await?
+//                 .json::<u128>()?;
+//
+//         println!("Token ID: {}, Curve Price: {}", token_id.to_string(), (token_price / one_coin).to_string());
+//     }
+//
+//     println!("-- Buy Price --");
+//     for amount in 0..10 {
+//         let buy_price =
+//             escrow_contract
+//                 .view(
+//                     &worker,
+//                     "calculate_buy_proxy_token",
+//                     json!({
+//                         "amount": U128::from(amount as u128)
+//                     }).to_string().into_bytes(),
+//                 )
+//                 .await?
+//                 .json::<u128>()?;
+//
+//         println!("Amount: {}, Buy Price: {}", amount.to_string(), (buy_price as f64 / one_coin as f64).to_string());
+//     }
+//
+//     println!("-- Sell Price --");
+//     for token_id in 0..10 {
+//         let mut token_ids: Vec<String> = vec![token_id.to_string()];
+//         let buy_price =
+//             escrow_contract
+//                 .view(
+//                     &worker,
+//                     "calculate_sell_proxy_token",
+//                     json!({
+//                         "token_ids": token_ids
+//                     }).to_string().into_bytes(),
+//                 )
+//                 .await?
+//                 .json::<u128>()?;
+//
+//         println!("Token ID: {}, Sell Price: {}", token_id.to_string(), (buy_price as f64 / one_coin as f64).to_string());
+//     }
+//
+//     Ok(())
+// }
+//
+// #[tokio::test]
+// async fn test_auction_curve_linear() -> anyhow::Result<()> {
+//     let worker = workspaces::sandbox().await?;
+//     let (_, stable_coin_contract, owner, _, _, finder, treasury, one_coin) = init(&worker).await?;
+//
+//
+//     // deploy
+//     let escrow_contract = worker.dev_deploy(NFT_ESCROW_CODE).await?;
+//     const CURVE_K: u128 = 2u128;
+//     const BASE_TOKEN_PRICE: u128 = 100u128;
+//     let curve_args = CurveArgs {
+//         arg_a: Some(CURVE_K),
+//         arg_b: Some(BASE_TOKEN_PRICE),
+//         arg_c: None,
+//         arg_d: None,
+//     };
+//
+//     // initialize
+//     escrow_contract
+//         .call(&worker, "new")
+//         .args_json((owner.id(), stable_coin_contract.id(), 24u8, CurveType::Linear, &curve_args, treasury.id()))?
+//         .max_gas()
+//         .transact()
+//         .await?;
+//
+//     // active project
+//     owner
+//         .call(&worker, escrow_contract.id(), "active_nft_project")
+//         .args_json((NAME, SYMBOL, NFT_BASE_URI, NFT_BLANK_URI, NFT_MAX_SUPPLY, finder.id(), PRE_MINT_AMOUNT, FUND_THRESHOLD, ONE_DAY, TWO_DAYS))?
+//         .max_gas()
+//         .transact()
+//         .await?;
+//
+//     let curve_type = escrow_contract.call(&worker, "get_curve_type")
+//         .view()
+//         .await?
+//         .json::<CurveType>()?;
+//
+//     assert_eq!(curve_type, CurveType::Linear);
+//
+//     let _curve_args = escrow_contract.call(&worker, "get_curve_args")
+//         .view()
+//         .await?
+//         .json::<CurveArgs>()?;
+//
+//     assert_eq!(&_curve_args.arg_a, &curve_args.arg_a);
+//     assert_eq!(&_curve_args.arg_b, &curve_args.arg_b);
+//
+//     println!("-- Token Price --");
+//     for token_id in 0..10 {
+//         let token_price =
+//             escrow_contract
+//                 .view(
+//                     &worker,
+//                     "get_token_price",
+//                     json!({
+//                         "token_id": U128::from(token_id as u128)
+//                     }).to_string().into_bytes(),
+//                 )
+//                 .await?
+//                 .json::<u128>()?;
+//
+//         println!("Token ID: {}, Curve Price: {}", token_id.to_string(), (token_price / one_coin).to_string());
+//     }
+//
+//     println!("-- Buy Price --");
+//     for amount in 0..10 {
+//         let buy_price =
+//             escrow_contract
+//                 .view(
+//                     &worker,
+//                     "calculate_buy_proxy_token",
+//                     json!({
+//                         "amount": U128::from(amount as u128)
+//                     }).to_string().into_bytes(),
+//                 )
+//                 .await?
+//                 .json::<u128>()?;
+//
+//         println!("Amount: {}, Buy Price: {}", amount.to_string(), (buy_price as f64 / one_coin as f64).to_string());
+//     }
+//
+//     println!("-- Sell Price --");
+//     for token_id in 0..10 {
+//         let mut token_ids: Vec<String> = vec![token_id.to_string()];
+//         let buy_price =
+//             escrow_contract
+//                 .view(
+//                     &worker,
+//                     "calculate_sell_proxy_token",
+//                     json!({
+//                         "token_ids": token_ids
+//                     }).to_string().into_bytes(),
+//                 )
+//                 .await?
+//                 .json::<u128>()?;
+//
+//         println!("Token ID: {}, Sell Price: {}", token_id.to_string(), (buy_price as f64 / one_coin as f64).to_string());
+//     }
+//
+//     Ok(())
+// }
+//
+// #[tokio::test]
+// async fn test_auction_curve_sigmoidal() -> anyhow::Result<()> {
+//     let worker = workspaces::sandbox().await?;
+//     let (_, stable_coin_contract, owner, _, _, finder, treasury, one_coin) = init(&worker).await?;
+//
+//
+//     // deploy
+//     let escrow_contract = worker.dev_deploy(NFT_ESCROW_CODE).await?;
+//     const CURVE_K: u128 = 30u128;
+//     const ARG_B: u128 = 10u128;
+//     const ARG_C: u128 = 100u128;
+//     const BASE_TOKEN_PRICE: u128 = 100u128;
+//     let curve_args = CurveArgs {
+//         arg_a: Some(CURVE_K),
+//         arg_b: Some(ARG_B),
+//         arg_c: Some(ARG_C),
+//         arg_d: Some(BASE_TOKEN_PRICE),
+//     };
+//
+//     // initialize
+//     escrow_contract
+//         .call(&worker, "new")
+//         .args_json((owner.id(), stable_coin_contract.id(), 24u8, CurveType::Sigmoidal, &curve_args, treasury.id()))?
+//         .max_gas()
+//         .transact()
+//         .await?;
+//
+//     // active project
+//     owner
+//         .call(&worker, escrow_contract.id(), "active_nft_project")
+//         .args_json((NAME, SYMBOL, NFT_BASE_URI, NFT_BLANK_URI, NFT_MAX_SUPPLY, finder.id(), PRE_MINT_AMOUNT, FUND_THRESHOLD, ONE_DAY, TWO_DAYS))?
+//         .max_gas()
+//         .transact()
+//         .await?;
+//
+//     let curve_type = escrow_contract.call(&worker, "get_curve_type")
+//         .view()
+//         .await?
+//         .json::<CurveType>()?;
+//
+//     assert_eq!(curve_type, CurveType::Sigmoidal);
+//
+//     let _curve_args = escrow_contract.call(&worker, "get_curve_args")
+//         .view()
+//         .await?
+//         .json::<CurveArgs>()?;
+//
+//     assert_eq!(&_curve_args.arg_a, &curve_args.arg_a);
+//     assert_eq!(&_curve_args.arg_b, &curve_args.arg_b);
+//     assert_eq!(&_curve_args.arg_c, &curve_args.arg_c);
+//     assert_eq!(&_curve_args.arg_d, &curve_args.arg_d);
+//
+//     println!("-- Token Price --");
+//     for token_id in 0..10 {
+//         let token_price =
+//             escrow_contract
+//                 .view(
+//                     &worker,
+//                     "get_token_price",
+//                     json!({
+//                         "token_id": U128::from(token_id as u128)
+//                     }).to_string().into_bytes(),
+//                 )
+//                 .await?
+//                 .json::<u128>()?;
+//
+//         println!("Token ID: {}, Curve Price: {}", token_id.to_string(), (token_price as f64 / one_coin as f64).to_string());
+//     }
+//
+//     println!("-- Buy Price --");
+//     for amount in 0..10 {
+//         let buy_price =
+//             escrow_contract
+//                 .view(
+//                     &worker,
+//                     "calculate_buy_proxy_token",
+//                     json!({
+//                         "amount": U128::from(amount as u128)
+//                     }).to_string().into_bytes(),
+//                 )
+//                 .await?
+//                 .json::<u128>()?;
+//
+//         println!("Amount: {}, Buy Price: {}", amount.to_string(), (buy_price as f64 / one_coin as f64).to_string());
+//     }
+//
+//     println!("-- Sell Price --");
+//     for token_id in 0..10 {
+//         let mut token_ids: Vec<String> = vec![token_id.to_string()];
+//         let buy_price =
+//             escrow_contract
+//                 .view(
+//                     &worker,
+//                     "calculate_sell_proxy_token",
+//                     json!({
+//                         "token_ids": token_ids
+//                     }).to_string().into_bytes(),
+//                 )
+//                 .await?
+//                 .json::<u128>()?;
+//
+//         println!("Token ID: {}, Sell Price: {}", token_id.to_string(), (buy_price as f64 / one_coin as f64).to_string());
+//     }
+//
+//     Ok(())
+// }
 
-    let res = owner
-        .call(&worker, contract.id(), "active_nft_project".into())
+#[tokio::test]
+async fn test_buy() -> anyhow::Result<()> {
+    let worker = workspaces::sandbox().await?;
+    let (escrow_contract, stable_coin_contract, owner, _, _, finder, treasury, one_coin) = init(&worker).await?;
+
+    // active project
+    owner
+        .call(&worker, escrow_contract.id(), "active_nft_project")
         .args_json((NAME, SYMBOL, NFT_BASE_URI, NFT_BLANK_URI, NFT_MAX_SUPPLY, finder.id(), PRE_MINT_AMOUNT, FUND_THRESHOLD, ONE_DAY, TWO_DAYS))?
         .max_gas()
         .transact()
         .await?;
-    assert!(res.is_success());
 
-    Ok(())
-}
+    // calculate stable coin amount for buying proxy token
+    let amount = U128::from(1u128);
+    let coin_amount = escrow_contract
+        .view(
+            &worker,
+            "calculate_buy_proxy_token",
+            json!({
+            "amount": amount
+        }).to_string().into_bytes(),
+        )
+        .await?
+        .json::<u128>()?;
 
-#[tokio::test]
-async fn test_active_ft_project() -> anyhow::Result<()> {
-    let worker = workspaces::sandbox().await?;
-    let (contract, _, owner, _, _, finder, _) = init(&worker).await?;
-
+    // buy proxy token
     let res = owner
-        .call(&worker, contract.id(), "active_ft_project".into())
-        .args_json((NAME, SYMBOL, NFT_BLANK_URI, NFT_MAX_SUPPLY, finder.id(), PRE_MINT_AMOUNT, FUND_THRESHOLD, ONE_DAY, TWO_DAYS))?
+        .call(&worker, escrow_contract.id(), "buy".into())
+        .args_json((amount, U128::from(coin_amount)))?
         .max_gas()
         .transact()
         .await?;
+
     assert!(res.is_success());
 
     Ok(())

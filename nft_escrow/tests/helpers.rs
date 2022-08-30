@@ -1,3 +1,5 @@
+use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
+use near_sdk::serde::{Deserialize, Serialize};
 use near_units::parse_near;
 
 pub const NAME: &str = "Theia Collection 1";
@@ -13,3 +15,20 @@ pub const FINDER_FEE: u16 = 1u16; // 1%
 pub const ONE_DAY: u128 = 3600u128 * 24u128;
 pub const TWO_DAYS: u128 = 3600u128 * 24u128 * 2u128;
 pub const ONE_WEEK: u128 = 3600u128 * 24u128 * 7u128;
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
+#[serde(crate = "near_sdk::serde")]
+pub enum CurveType {
+    Horizontal,
+    Linear,
+    Sigmoidal,
+}
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, PartialEq, Clone, Debug)]
+#[serde(crate = "near_sdk::serde")]
+pub struct CurveArgs {
+    pub arg_a: Option<u128>,
+    pub arg_b: Option<u128>,
+    pub arg_c: Option<u128>,
+    pub arg_d: Option<u128>,
+}

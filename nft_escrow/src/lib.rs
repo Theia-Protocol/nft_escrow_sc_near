@@ -71,7 +71,8 @@ const TGAS: u64 = 1_000_000_000_000;
 const GAS_NON_FUNGIBLE_TOKEN_NEW: Gas = Gas(parse_gas!("20 Tgas") as u64);
 const GAS_FUNGIBLE_TOKEN_NEW: Gas = Gas(parse_gas!("20 Tgas") as u64);
 const GAS_PROXY_TOKEN_NEW: Gas = Gas(parse_gas!("50 Tgas") as u64);
-const MIN_DEPOSIT_PROXY_TOKEN : Balance = 7_500_000_000_000_000_000_000_000;
+//const MIN_DEPOSIT_PROXY_TOKEN : Balance = 7_500_000_000_000_000_000_000_000;
+const MIN_DEPOSIT_PROXY_TOKEN : Balance = 1_500_000_000_000_000_000_000_000;
 const DEPOSIT_PROXY_TOKEN_MINT: Balance = 4_200_000_000_000_000_000_000_000;
 const GAS_PROXY_TOKEN_MINT: Gas = Gas(parse_gas!("50 Tgas") as u64);
 const NO_DEPOSIT: Balance = 0u128;
@@ -182,7 +183,7 @@ impl Contract {
                         "receiver_id": self.owner_id.clone(),
                         "amount": U128::from(pre_mint_amount)
                     }).to_string().as_bytes().to_vec(),
-                DEPOSIT_PROXY_TOKEN_MINT,
+                NO_DEPOSIT,
                 GAS_PROXY_TOKEN_MINT
             );
 
@@ -256,7 +257,7 @@ impl Contract {
                         "receiver_id": self.owner_id.clone(),
                         "amount": U128::from(pre_mint_amount)
                     }).to_string().as_bytes().to_vec(),
-                DEPOSIT_PROXY_TOKEN_MINT,
+                NO_DEPOSIT,
                 GAS_PROXY_TOKEN_MINT
             );
 
@@ -286,12 +287,12 @@ impl Contract {
     }
 
     /// buy proxy token
-    pub fn buy(&mut self, amount: Balance, coin_amount: Balance) -> Promise {
+    pub fn buy(&mut self, amount: U128, coin_amount: U128) -> Promise {
         self.assert_not_paused();
         self.assert_is_ongoing();
 
         let cal_coin_amount = self.calculate_buy_proxy_token(amount);
-        assert!(coin_amount >= cal_coin_amount, "{}", ERR07_INSUFFICIENT_FUND);
+        assert!(coin_amount.0 >= cal_coin_amount, "{}", ERR07_INSUFFICIENT_FUND);
 
         let treasury_fee_amount = cal_coin_amount
             .checked_mul(self.treasury_fee as u128)
@@ -381,7 +382,7 @@ impl Contract {
 
         let convert_project_token = match self.is_closed {
             true => {
-                self.internal_project_token_mint(env::predecessor_account_id(), token_ids.len() as u128)
+                self.internal_project_token_mint(env::predecessor_account_id(), U128::from(token_ids.len() as u128))
             }
             false => {
                 // owner
@@ -461,13 +462,13 @@ impl Contract {
                 .on_close_project();
 
         if self.pre_mint_amount > 0 {
-            let pre_mint = self.internal_project_token_mint(self.owner_id.clone(), self.pre_mint_amount);
+            let pre_mint = self.internal_project_token_mint(self.owner_id.clone(), U128::from(self.pre_mint_amount));
             let burn_batch = ext_proxy_token::ext(self.proxy_token_id.clone().unwrap())
                 .with_static_gas(Gas(5 * TGAS))
                 .mt_burn_with_amount(
                     self.owner_id.clone(),
                     "0".to_string(),
-                    self.pre_mint_amount,
+                    U128::from(self.pre_mint_amount),
                 );
             burn_batch.then(pre_mint).then(transfer_owner).then(close_project_callback)
         } else {
@@ -483,7 +484,7 @@ impl Contract {
         self.is_closed = true;
     }
 
-    pub fn internal_project_token_mint(&mut self, to: AccountId, amount: u128) -> Promise {
+    pub fn internal_project_token_mint(&mut self, to: AccountId, amount: U128) -> Promise {
         match self.project_token_type {
             ProjectTokenType::NonFungible => ext_nft_collection::ext(self.project_token_id.clone().unwrap())
                 .with_static_gas(Gas(5 * TGAS))
