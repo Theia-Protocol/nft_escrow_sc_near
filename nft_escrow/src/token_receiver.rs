@@ -15,9 +15,8 @@ impl FungibleTokenReceiver for Contract {
         let args = msg.split(":").collect::<Vec<&str>>();
 
         if args.len() == 2 && args[0] == "buy" && token_in == self.stable_coin_id {
-            self.buy(sender_id, U128(args[1].parse::<u128>().unwrap()), amount)
-        } else {
-            PromiseOrValue::Value(U128(0))
+            self.buy(sender_id, U128(args[1].parse::<u128>().unwrap()), amount);
         }
+        PromiseOrValue::Value(U128(0))
     }
 }

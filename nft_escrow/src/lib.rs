@@ -281,7 +281,7 @@ impl Contract {
     }
 
     /// buy proxy token
-    pub(crate) fn buy(&mut self, from: AccountId, amount: U128, coin_amount: U128) -> PromiseOrValue<U128> {
+    pub(crate) fn buy(&mut self, from: AccountId, amount: U128, coin_amount: U128) -> Promise {
         self.assert_not_paused();
         self.assert_is_ongoing();
 
@@ -305,31 +305,34 @@ impl Contract {
         }
 
         // Transfer stable coin to treasury
-        let treasury_promise = ext_fungible_token::ext(self.stable_coin_id.clone())
-            .with_static_gas(GAS_FOR_FT_TRANSFER)
-            .with_attached_deposit(ONE_YOCTO)
-            .ft_transfer(
-                self.treasury_id.clone(),
-                U128::from(treasury_fee_amount),
-                None,
-            );
+        // let treasury_promise = ext_fungible_token::ext(self.stable_coin_id.clone())
+        //     .with_static_gas(GAS_FOR_FT_TRANSFER)
+        //     .with_attached_deposit(ONE_YOCTO)
+        //     .ft_transfer(
+        //         self.treasury_id.clone(),
+        //         U128::from(treasury_fee_amount),
+        //         None,
+        //     );
 
-        // Mint proxy token to customer
+        //Mint proxy token to customer
         let proxy_token_mint_promise = ext_proxy_token::ext(self.proxy_token_id.clone().unwrap())
             .with_static_gas(Gas(5 * TGAS))
-            .with_attached_deposit(MIN_DEPOSIT_PROXY_TOKEN)
+            .with_attached_deposit(DEPOSIT_PROXY_TOKEN_MINT)
             .mt_mint(
                 from,
                 amount,
             );
 
-        let refund_coin_amount = coin_amount.0 - cal_coin_amount;
+        // let refund_coin_amount = coin_amount.0 - cal_coin_amount;
 
-        PromiseOrValue::Promise(treasury_promise.then(proxy_token_mint_promise).then(
-            ext_self::ext(env::current_account_id())
-                .with_static_gas(Gas(5 * TGAS))
-                .on_buy(U128(refund_coin_amount))
-        ))
+        // PromiseOrValue::Promise(treasury_promise.then(proxy_token_mint_promise).then(
+        //     ext_self::ext(env::current_account_id())
+        //         .with_static_gas(Gas(5 * TGAS))
+        //         .on_buy(U128(refund_coin_amount))
+        // ))
+
+        //treasury_promise.then(proxy_token_mint_promise)
+        proxy_token_mint_promise
     }
 
     #[private]

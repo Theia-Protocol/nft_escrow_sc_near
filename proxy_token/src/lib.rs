@@ -74,7 +74,6 @@ impl Contract {
 
     /// Mint nft tokens with amount belonging to `receiver_id`.
     /// caller should be owner
-    #[payable]
     pub fn mt_mint(
         &mut self,
         receiver_id: AccountId,
@@ -280,7 +279,7 @@ mod tests {
         // mint
         testing_env!(
             get_context(owner_id.clone())
-                .attached_deposit(677 * env::storage_byte_cost())
+                .attached_deposit(379 * env::storage_byte_cost())
                 .build()
         );
         contract.mt_mint(alice_id.clone(), 3u128.into());
@@ -290,8 +289,6 @@ mod tests {
         // burn
         testing_env!(
              get_context(owner_id.clone())
-                .attached_deposit(677 * env::storage_byte_cost())
-                .attached_deposit(1)
                 .build());
         contract.mt_burn(alice_id.clone(), ["0".to_string(), "1".to_string()].to_vec());
         assert_eq!(contract.mt_balance_of(accounts(1), ["0".to_string(), "1".to_string(), "2".to_string()].to_vec()), [0u128.into(), 0u128.into(), 1u128.into()].to_vec());
