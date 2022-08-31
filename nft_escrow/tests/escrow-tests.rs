@@ -8,6 +8,11 @@ use helpers::*;
 
 const FUNGIBLE_TOKEN_CODE: &[u8] = include_bytes!("../../target/wasm32-unknown-unknown/release/ft_token.wasm");
 const NFT_ESCROW_CODE: &[u8] = include_bytes!("../../target/wasm32-unknown-unknown/release/nft_escrow_sc.wasm");
+const STORAGE_BYTE_COST: u128 = 10_000_000_000_000_000_000;
+
+fn parseUnitWithDecimals(amount: u128, decimals: u8) -> u128 {
+    return amount * 10u128.pow(decimals as u32)
+}
 
 async fn init(
     worker: &Worker<impl DevNetwork>
@@ -21,6 +26,7 @@ async fn init(
     let stable_coin_decimals = 24u8;
     let one_coin = 10u128.pow(stable_coin_decimals as u32);
 
+    // deploy USDT
     let stable_coin_contract = worker.dev_deploy(FUNGIBLE_TOKEN_CODE).await?;
     let res = stable_coin_contract
         .call(&worker, "new")
@@ -30,6 +36,58 @@ async fn init(
         .await?;
     assert!(res.is_success());
 
+    // register owner
+    stable_coin_contract
+        .call(&worker, "storage_deposit")
+        .args_json((owner.id(), Option::<bool>::None))?
+        .deposit(125 * STORAGE_BYTE_COST)
+        .max_gas()
+        .transact()
+        .await?;
+        
+    // treansfer 1000 USDT to owner
+    owner.call(&worker, stable_coin_contract.id(), "ft_mint")
+        .args_json((owner.id(), U128(parseUnitWithDecimals(1000u128, 24u8))))?
+        .max_gas()
+        .transact()
+        .await?;
+
+    // register alice
+    stable_coin_contract
+        .call(&worker, "storage_deposit")
+        .args_json((alice.id(), Option::<bool>::None))?
+        .deposit(125 * STORAGE_BYTE_COST)
+        .max_gas()
+        .transact()
+        .await?;
+
+    // treansfer 1000 USDT to alice
+    owner.call(&worker, stable_coin_contract.id(), "ft_mint")
+        .args_json((alice.id(), U128(parseUnitWithDecimals(1000u128, 24u8))))?
+        .max_gas()
+        .transact()
+        .await?;
+
+    // register finder
+    stable_coin_contract
+        .call(&worker, "storage_deposit")
+        .args_json((finder.id(), Option::<bool>::None))?
+        .deposit(125 * STORAGE_BYTE_COST)
+        .max_gas()
+        .transact()
+        .await?;
+
+    // register treasury
+    stable_coin_contract
+        .call(&worker, "storage_deposit")
+        .args_json((treasury.id(), Option::<bool>::None))?
+        .deposit(125 * STORAGE_BYTE_COST)
+        .max_gas()
+        .transact()
+        .await?;
+
+
+    // deploy escrow
     let escrow_contract = worker.dev_deploy(NFT_ESCROW_CODE).await?;
     let curve_args = CurveArgs {
         arg_a: Some(100u128),
@@ -38,6 +96,7 @@ async fn init(
         arg_d: None,
     };
 
+    // register escrow contract
     let res = escrow_contract
         .call(&worker, "new")
         .args_json((owner.id(), stable_coin_contract.id(), stable_coin_decimals, CurveType::Horizontal, curve_args, treasury.id()))?
@@ -45,6 +104,15 @@ async fn init(
         .transact()
         .await?;
     assert!(res.is_success());
+
+
+    stable_coin_contract
+        .call(&worker, "storage_deposit")
+        .args_json((escrow_contract.id(), Option::<bool>::None))?
+        .deposit(125 * STORAGE_BYTE_COST)
+        .max_gas()
+        .transact()
+        .await?;
 
     Ok((escrow_contract, stable_coin_contract, owner, alice, bob, finder, treasury, one_coin))
 }
@@ -61,10 +129,13 @@ async fn init(
 //         .transact()
 //         .await?;
 //     assert!(res.is_success());
+//     assert_eq!(std::str::from_utf8(&res.raw_bytes().unwrap()).unwrap(), "true");
+//
+//     println!("Result: {:?}", res);
 //
 //     Ok(())
 // }
-//
+
 // #[tokio::test]
 // async fn test_active_ft_project() -> anyhow::Result<()> {
 //     let worker = workspaces::sandbox().await?;
@@ -80,7 +151,7 @@ async fn init(
 //
 //     Ok(())
 // }
-//
+
 // #[tokio::test]
 // async fn test_auction_curve_horizontal() -> anyhow::Result<()> {
 //     let worker = workspaces::sandbox().await?;
@@ -194,7 +265,7 @@ async fn init(
 //
 //     Ok(())
 // }
-//
+
 // #[tokio::test]
 // async fn test_auction_curve_linear() -> anyhow::Result<()> {
 //     let worker = workspaces::sandbox().await?;
@@ -405,10 +476,75 @@ async fn init(
 //     Ok(())
 // }
 
+// #[tokio::test]
+// async fn test_buy() -> anyhow::Result<()> {
+//     let worker = workspaces::sandbox().await?;
+//     let (escrow_contract, stable_coin_contract, owner, _, _, finder, treasury, _) = init(&worker).await?;
+
+//     // active project
+//     owner
+//         .call(&worker, escrow_contract.id(), "active_nft_project")
+//         .args_json((NAME, SYMBOL, NFT_BASE_URI, NFT_BLANK_URI, NFT_MAX_SUPPLY, finder.id(), PRE_MINT_AMOUNT, FUND_THRESHOLD, ONE_DAY, TWO_DAYS))?
+//         .max_gas()
+//         .transact()
+//         .await?;
+
+//     // calculate stable coin amount for buying proxy token
+//     let amount = U128::from(1u128);
+//     let mut coin_amount = escrow_contract
+//         .view(
+//             &worker,
+//             "calculate_buy_proxy_token",
+//             json!({
+//             "amount": amount
+//         }).to_string().into_bytes(),
+//         )
+//         .await?
+//         .json::<u128>()?;
+
+//     // buy proxy token
+//     let res = owner
+//         .call(&worker, stable_coin_contract.id(), "ft_transfer_call".into())
+//         .args_json((escrow_contract.id(), U128(coin_amount), Option::<String>::None, format!("buy:{}", amount.0)))?
+//         .deposit(1u128)
+//         .max_gas()
+//         .transact()
+//         .await?;
+
+//     assert!(res.is_success());
+    
+//     let balance = stable_coin_contract
+//         .view(
+//             &worker,
+//             "ft_balance_of",
+//             json!({
+//                 "account_id": escrow_contract.id()
+//             }).to_string().into_bytes()
+//         )
+//         .await?
+//         .json::<U128>()?;
+//     assert_eq!(balance.0, coin_amount * (100u128 - PROTOCOL_FEE as u128)/100u128);
+
+//     let balance = stable_coin_contract
+//         .view(
+//             &worker,
+//             "ft_balance_of",
+//             json!({
+//                 "account_id": treasury.id()
+//             }).to_string().into_bytes()
+//         )
+//         .await?
+//         .json::<U128>()?;
+//     assert_eq!(balance.0, coin_amount * (PROTOCOL_FEE as u128)/100u128);
+
+//     Ok(())
+// }
+
+
 #[tokio::test]
-async fn test_buy() -> anyhow::Result<()> {
+async fn test_sell() -> anyhow::Result<()> {
     let worker = workspaces::sandbox().await?;
-    let (escrow_contract, stable_coin_contract, owner, _, _, finder, treasury, one_coin) = init(&worker).await?;
+    let (escrow_contract, stable_coin_contract, owner, _, _, finder, treasury, _) = init(&worker).await?;
 
     // active project
     owner
@@ -418,9 +554,11 @@ async fn test_buy() -> anyhow::Result<()> {
         .transact()
         .await?;
 
+
+    // buy proxy token
     // calculate stable coin amount for buying proxy token
-    let amount = U128::from(1u128);
-    let coin_amount = escrow_contract
+    let amount = U128::from(2u128);
+    let mut coin_amount = escrow_contract
         .view(
             &worker,
             "calculate_buy_proxy_token",
@@ -431,15 +569,27 @@ async fn test_buy() -> anyhow::Result<()> {
         .await?
         .json::<u128>()?;
 
-    // buy proxy token
     let res = owner
-        .call(&worker, escrow_contract.id(), "buy".into())
-        .args_json((amount, U128::from(coin_amount)))?
+        .call(&worker, stable_coin_contract.id(), "ft_transfer_call".into())
+        .args_json((escrow_contract.id(), U128(coin_amount), Option::<String>::None, format!("buy:{}", amount.0)))?
+        .deposit(1u128)
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(res.is_success());
+    println!("buy: {:?}", res);
+
+    let token_ids: Vec<String> = vec![2.to_string()];
+    // sell proxy token
+    let res = owner
+        .call(&worker, escrow_contract.id(), "sell".into())
+        .args(json!({"token_ids": token_ids}).to_string().as_bytes().to_vec())
         .max_gas()
         .transact()
         .await?;
 
     assert!(res.is_success());
+    println!("sell: {:?}", res);
 
     Ok(())
 }

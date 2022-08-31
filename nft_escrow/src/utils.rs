@@ -82,10 +82,9 @@ pub trait SelfCallbacks {
     fn on_activate(
         &mut self,
         project_token_id: AccountId,
-        proxy_token_id: AccountId,
-        attached_deposit: U128,
-        predecessor_account_id: AccountId
+        proxy_token_id: AccountId
     ) -> PromiseOrValue<bool>;
+    fn on_buy(&mut self, refund_amount: U128);
     fn on_convert(&mut self, converted_amount: Balance);
     fn on_close_project(&mut self);
 }

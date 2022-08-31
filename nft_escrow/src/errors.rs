@@ -14,6 +14,8 @@ pub const ERR011_NOT_AVAILABLE_TO_CLOSE: &str = "E11: Invalid amount";
 pub const ERR012_CLOSE_PROJECT_FAILED: &str = "E12: Closing project failed";
 pub const ERR013_ALREADY_CLOSED: &str = "E13: Project was already closed";
 pub const ERR014_CONVERT_FAILED: &str = "E14: Convert failed";
+pub const ERR015_ACTIVATE_FAILED: &str = "E15: Activate failed";
+pub const ERR016_ACTIVATE_FAILED: &str = "E16: Buy failed";
 
 // Validate errors
 pub const ERR10_NOT_ACTIVATED: &str = "E10: Escrow is not activated";
