@@ -74,6 +74,7 @@ impl Contract {
 
     /// Mint nft tokens with amount belonging to `receiver_id`.
     /// caller should be owner
+    #[payable]
     pub fn mt_mint(
         &mut self,
         receiver_id: AccountId,
@@ -85,13 +86,12 @@ impl Contract {
 
         let mut token_ids: Vec<TokenId> = vec![];
         let mut i = 0;
+        
+        // Remember current storage usage if refund_id is Some
         let refund_id = Some(env::predecessor_account_id());
+        let initial_storage_usage = refund_id.as_ref().map(|account_id| (account_id, env::storage_usage()));
 
         while i < amount.0 {
-
-            // Remember current storage usage if refund_id is Some
-            let initial_storage_usage = refund_id.as_ref().map(|account_id| (account_id, env::storage_usage()));
-
             let token_id: TokenId = self.all_total_supply.checked_add(i).unwrap().to_string();
 
             // Insert new supply
@@ -116,10 +116,6 @@ impl Contract {
                 balances.insert(&receiver_id, &new);
             }
 
-            if let Some((id, usage)) = initial_storage_usage {
-                refund_deposit_to_account(env::storage_usage() - usage, id.clone());
-            }
-
             token_ids.push(token_id.clone());
             i += 1;
 
@@ -131,6 +127,11 @@ impl Contract {
             }
                 .emit();
         }
+
+        if let Some((id, usage)) = initial_storage_usage {
+            refund_deposit_to_account(env::storage_usage() - usage, id.clone());
+        }
+        
         self.all_total_supply = self.all_total_supply.checked_add(amount.0).unwrap();
 
         token_ids
@@ -279,7 +280,7 @@ mod tests {
         // mint
         testing_env!(
             get_context(owner_id.clone())
-                .attached_deposit(379 * env::storage_byte_cost())
+                .attached_deposit(379 * 3 * env::storage_byte_cost())
                 .build()
         );
         contract.mt_mint(alice_id.clone(), 3u128.into());

@@ -6,6 +6,8 @@ impl Contract {
 
     pub fn get_project_token_id(&self) -> AccountId { self.project_token_id.clone().unwrap() }
 
+    pub fn get_proxy_token_id(&self) -> AccountId { self.proxy_token_id.clone().unwrap() }
+
     pub fn get_finder_fee(&self) -> u32 { self.finder_fee }
 
     pub fn get_finder_id(&self) -> AccountId { self.finder_id.clone().unwrap() }

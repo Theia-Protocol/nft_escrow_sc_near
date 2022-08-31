@@ -3,7 +3,7 @@ mod helpers;
 use near_sdk::json_types::U128;
 use serde_json::json;
 use workspaces::prelude::*;
-use workspaces::{Account, Contract, DevNetwork, Worker};
+use workspaces::{Account, Contract, DevNetwork, Worker, AccountId};
 use helpers::*;
 
 const FUNGIBLE_TOKEN_CODE: &[u8] = include_bytes!("../../target/wasm32-unknown-unknown/release/ft_token.wasm");
@@ -120,7 +120,7 @@ async fn init(
 // #[tokio::test]
 // async fn test_active_nft_project() -> anyhow::Result<()> {
 //     let worker = workspaces::sandbox().await?;
-//     let (contract, _, owner, _, _, finder, _, _) = init(&worker).await?;
+//     let (contract, _, owner, _, _, finder, _, _, _, _) = init(&worker).await?;
 //
 //     let res = owner
 //         .call(&worker, contract.id(), "active_nft_project".into())
@@ -139,7 +139,7 @@ async fn init(
 // #[tokio::test]
 // async fn test_active_ft_project() -> anyhow::Result<()> {
 //     let worker = workspaces::sandbox().await?;
-//     let (contract, _, owner, _, _, finder, _, _) = init(&worker).await?;
+//     let (contract, _, owner, _, _, finder, _, _, _, _) = init(&worker).await?;
 //
 //     let res = owner
 //         .call(&worker, contract.id(), "active_ft_project".into())
@@ -155,7 +155,7 @@ async fn init(
 // #[tokio::test]
 // async fn test_auction_curve_horizontal() -> anyhow::Result<()> {
 //     let worker = workspaces::sandbox().await?;
-//     let (_, stable_coin_contract, owner, _, _, finder, treasury, one_coin) = init(&worker).await?;
+//     let (_, stable_coin_contract, owner, _, _, finder, treasury, one_coin, _, _) = init(&worker).await?;
 //
 //
 //     // deploy
@@ -269,7 +269,7 @@ async fn init(
 // #[tokio::test]
 // async fn test_auction_curve_linear() -> anyhow::Result<()> {
 //     let worker = workspaces::sandbox().await?;
-//     let (_, stable_coin_contract, owner, _, _, finder, treasury, one_coin) = init(&worker).await?;
+//     let (_, stable_coin_contract, owner, _, _, finder, treasury, one_coin, _, _) = init(&worker).await?;
 //
 //
 //     // deploy
@@ -372,7 +372,7 @@ async fn init(
 // #[tokio::test]
 // async fn test_auction_curve_sigmoidal() -> anyhow::Result<()> {
 //     let worker = workspaces::sandbox().await?;
-//     let (_, stable_coin_contract, owner, _, _, finder, treasury, one_coin) = init(&worker).await?;
+//     let (_, stable_coin_contract, owner, _, _, finder, treasury, one_coin, _, _) = init(&worker).await?;
 //
 //
 //     // deploy
@@ -479,7 +479,7 @@ async fn init(
 // #[tokio::test]
 // async fn test_buy() -> anyhow::Result<()> {
 //     let worker = workspaces::sandbox().await?;
-//     let (escrow_contract, stable_coin_contract, owner, _, _, finder, treasury, _) = init(&worker).await?;
+//     let (escrow_contract, stable_coin_contract, owner, _, _, finder, treasury, _, _, _) = init(&worker).await?;
 
 //     // active project
 //     owner
@@ -544,17 +544,21 @@ async fn init(
 #[tokio::test]
 async fn test_sell() -> anyhow::Result<()> {
     let worker = workspaces::sandbox().await?;
-    let (escrow_contract, stable_coin_contract, owner, _, _, finder, treasury, _) = init(&worker).await?;
+    let (escrow_contract, stable_coin_contract, owner, _, _, finder, _, _) = init(&worker).await?;
 
     // active project
-    owner
+    let res = owner
         .call(&worker, escrow_contract.id(), "active_nft_project")
         .args_json((NAME, SYMBOL, NFT_BASE_URI, NFT_BLANK_URI, NFT_MAX_SUPPLY, finder.id(), PRE_MINT_AMOUNT, FUND_THRESHOLD, ONE_DAY, TWO_DAYS))?
         .max_gas()
         .transact()
         .await?;
 
-
+    let proxy_token_id = escrow_contract.call(&worker, "get_proxy_token_id")
+        .view()
+        .await?
+        .json::<AccountId>()?;
+    
     // buy proxy token
     // calculate stable coin amount for buying proxy token
     let amount = U128::from(2u128);
@@ -577,7 +581,18 @@ async fn test_sell() -> anyhow::Result<()> {
         .transact()
         .await?;
     assert!(res.is_success());
-    println!("buy: {:?}", res);
+    // println!("buy: {:?}", res);
+
+    assert_eq!(owner
+        .call(
+            &worker,
+            &proxy_token_id,
+            "mt_balance_of",
+        )
+        .args_json((owner.id(), vec![2.to_string(), 3.to_string()]))?
+        .view()
+        .await?
+        .json::<Vec<u128>>()?, vec![1u128.into(), 1u128.into()]);
 
     let token_ids: Vec<String> = vec![2.to_string()];
     // sell proxy token
@@ -589,7 +604,18 @@ async fn test_sell() -> anyhow::Result<()> {
         .await?;
 
     assert!(res.is_success());
-    println!("sell: {:?}", res);
+    // println!("sell: {:?}", res);
+
+    assert_eq!(owner
+        .call(
+            &worker,
+            &proxy_token_id,
+            "mt_balance_of",
+        )
+        .args_json((owner.id(), vec![2.to_string(), 3.to_string()]))?
+        .view()
+        .await?
+        .json::<Vec<u128>>()?, vec![0u128.into(), 1u128.into()]);
 
     Ok(())
 }
