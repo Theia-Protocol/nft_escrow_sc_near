@@ -12,8 +12,8 @@ pub const FUND_THRESHOLD: u128 = parse_near!("200 N");
 pub const PROTOCOL_FEE: u16 = 1u16; // 1%
 pub const FINDER_FEE: u16 = 1u16; // 1%
 
-pub const ONE_HOUR: u128 = 3600u128 * 1000;
-pub const TOW_HOURS: u128 = 3600u128 * 2 * 1000;
+pub const FIVE_MINUTES: u128 = 300u128 * 1_000_000_000;    // 5 min (nanosecond)
+pub const TEN_MINUTES: u128 = 600u128 * 1_000_000_000;   // 10 min (nanosecond)
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
 #[serde(crate = "near_sdk::serde")]

@@ -1,5 +1,5 @@
 use near_contract_standards::non_fungible_token::TokenId;
-use near_sdk::{ext_contract, AccountId, Gas, Balance, PromiseOrValue, PromiseError, PromiseResult, env};
+use near_sdk::{ext_contract, AccountId, Gas, Balance, PromiseOrValue, PromiseResult, env};
 use near_sdk::json_types::{U128};
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::serde::{Deserialize, Serialize};
@@ -86,8 +86,9 @@ pub trait SelfCallbacks {
     ) -> PromiseOrValue<bool>;
     fn on_action(&mut self);
     fn on_convert(&mut self, converted_amount: Balance);
-    fn on_claim_fund(&mut self);
-    fn on_close_project(&mut self);
+    fn on_claim_fund(&mut self, claimed_amount: U128);
+    fn on_close_project_one(&mut self);
+    fn on_close_project_three(&mut self);
 }
 
 #[ext_contract(ext_nft_collection)]
@@ -136,7 +137,7 @@ pub fn integer_sqrt(value: U256) -> U256 {
 pub fn is_promise_ok(result: PromiseResult) -> bool {
     match result {
         PromiseResult::NotReady => unreachable!(),
-        PromiseResult::Successful(val) => true,
+        PromiseResult::Successful(_) => true,
         PromiseResult::Failed => env::panic_str("ERR_CALL_FAILED"),
     }
 }

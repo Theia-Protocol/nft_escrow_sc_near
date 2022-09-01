@@ -9,9 +9,9 @@ mod token_receiver;
 
 use near_contract_standards::non_fungible_token::TokenId;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::{env, near_bindgen, AccountId, Balance, PanicOnDefault, Promise, Gas, PromiseError, PromiseOrValue, is_promise_success, log, require, PromiseResult};
+use near_sdk::env::STORAGE_PRICE_PER_BYTE;
+use near_sdk::{env, near_bindgen, AccountId, Balance, PanicOnDefault, Promise, Gas, is_promise_success, log, require};
 use near_sdk::json_types::U128;
-use near_units::parse_gas;
 use near_sdk::serde_json::json;
 use crate::errors::*;
 use crate::utils::*;
@@ -69,16 +69,12 @@ pub struct Contract {
 const MIN_STORAGE_NON_FUNGIBLE_TOKEN: Balance = 7_000_000_000_000_000_000_000_000;
 //1.1Ⓝ
 const MIN_STORAGE_FUNGIBLE_TOKEN: Balance = 4_100_000_000_000_000_000_000_000;
-const TGAS: u64 = 1_000_000_000_000;
-const GAS_NON_FUNGIBLE_TOKEN_NEW: Gas = Gas(parse_gas!("20 Tgas") as u64);
-const GAS_FUNGIBLE_TOKEN_NEW: Gas = Gas(parse_gas!("20 Tgas") as u64);
-const GAS_PROXY_TOKEN_NEW: Gas = Gas(parse_gas!("50 Tgas") as u64);
 const MIN_STORAGE_PROXY_TOKEN : Balance = 7_500_000_000_000_000_000_000_000;
 const DEPOSIT_ONE_PROXY_TOKEN_MINT: Balance = 4_100_000_000_000_000_000_000_000;
-const DEPOSIT_NFT_MINT: Balance = 5_600_000_000_000_000_000_000_000;
-const GAS_PROXY_TOKEN_MINT: Gas = Gas(parse_gas!("50 Tgas") as u64);
+const DEPOSIT_ONE_NFT_MINT: Balance = 638 * STORAGE_PRICE_PER_BYTE;
 const NO_DEPOSIT: Balance = 0u128;
 const ONE_YOCTO: Balance = 1u128;
+const TGAS: u64 = 1_000_000_000_000;
 
 const PROXY_TOKEN_CODE: &[u8] = include_bytes!("../../target/wasm32-unknown-unknown/release/proxy_token.wasm");
 const NFT_COLLECTION_CODE: &[u8] = include_bytes!("../../target/wasm32-unknown-unknown/release/nft_collection.wasm");
@@ -157,7 +153,7 @@ impl Contract {
                     "max_supply": U128::from(max_supply)
                 }).to_string().as_bytes().to_vec(),
                 NO_DEPOSIT,
-                GAS_NON_FUNGIBLE_TOKEN_NEW
+                Gas(5 * TGAS)
             );
 
         // deploy proxy token
@@ -175,7 +171,7 @@ impl Contract {
                         "max_supply": U128::from(max_supply)
                     }).to_string().as_bytes().to_vec(),
                 NO_DEPOSIT,
-                GAS_PROXY_TOKEN_NEW
+                Gas(5 * TGAS)
             )
             .function_call(
                 "mt_mint".to_string(),
@@ -184,7 +180,7 @@ impl Contract {
                         "amount": U128::from(pre_mint_amount)
                     }).to_string().as_bytes().to_vec(),
                     DEPOSIT_ONE_PROXY_TOKEN_MINT,
-                GAS_PROXY_TOKEN_MINT
+                Gas(5 * TGAS)
             );
 
         project_token_promise
@@ -231,7 +227,7 @@ impl Contract {
                     "symbol": symbol.clone()
                 }).to_string().as_bytes().to_vec(),
                 NO_DEPOSIT,
-                GAS_FUNGIBLE_TOKEN_NEW
+                Gas(5 * TGAS)
             );
 
         // deploy proxy token
@@ -249,7 +245,7 @@ impl Contract {
                         "max_supply": U128::from(max_supply)
                     }).to_string().as_bytes().to_vec(),
                 NO_DEPOSIT,
-                GAS_PROXY_TOKEN_NEW
+                Gas(5 * TGAS)
             )
             .function_call(
                 "mt_mint".to_string(),
@@ -258,7 +254,7 @@ impl Contract {
                         "amount": U128::from(pre_mint_amount)
                     }).to_string().as_bytes().to_vec(),
                     DEPOSIT_ONE_PROXY_TOKEN_MINT * pre_mint_amount,
-                GAS_PROXY_TOKEN_MINT
+                Gas(5 * TGAS)
             );
 
         project_token_promise.and(proxy_token_promise).then(
@@ -455,16 +451,16 @@ impl Contract {
             .then(
                 ext_self::ext(env::current_account_id())
                         .with_static_gas(Gas(5 * TGAS))
-                        .on_claim_fund()
+                        .on_claim_fund(amount)
             )
     }
 
     #[private]
-    pub fn on_claim_fund(&mut self) -> bool {
+    pub fn on_claim_fund(&mut self, claimed_amount: U128) {
         require!(env::promise_results_count() == 2, "Contract expected a result on the callback");
 
         if is_promise_ok(env::promise_result(0)) && is_promise_ok(env::promise_result(1)) {
-            true
+            self.total_fund_amount -= claimed_amount.0;
         } else {
             env::panic_str(ERR017_CLAIM_FUND_FAILED);
         }
@@ -492,46 +488,62 @@ impl Contract {
                 .set_owner(self.owner_id.clone())
         };
 
-        let close_project_callback =
-            ext_self::ext(env::current_account_id())
-                .with_static_gas(Gas(5 * TGAS))
-                .on_close_project();
-
         if self.pre_mint_amount > 0 {
             let pre_mint = self.internal_project_token_mint(self.owner_id.clone(), U128::from(self.pre_mint_amount));
+            let token_ids = (0..self.pre_mint_amount - 1).enumerate().map(|(_, token_id)| { token_id.to_string() }).collect();
             let burn_batch = ext_proxy_token::ext(self.proxy_token_id.clone().unwrap())
                 .with_static_gas(Gas(5 * TGAS))
-                .mt_burn_with_amount(
+                .mt_burn(
                     self.owner_id.clone(),
-                    "0".to_string(),
-                    U128::from(self.pre_mint_amount),
+                    token_ids,
                 );
-            burn_batch.then(pre_mint).then(transfer_owner).then(close_project_callback)
+            burn_batch
+                .and(pre_mint)
+                .and(transfer_owner)
+                .then(  
+                    ext_self::ext(env::current_account_id())
+                        .with_static_gas(Gas(5 * TGAS))
+                        .on_close_project_three()
+                )
         } else {
-            transfer_owner.then(close_project_callback)
+            transfer_owner
+                .then(  
+                    ext_self::ext(env::current_account_id())
+                        .with_static_gas(Gas(5 * TGAS))
+                        .on_close_project_one()
+                )
         }
     }
 
     #[private]
-    pub fn on_close_project(&mut self, #[callback_result] call_result: Result<(), PromiseError>) {
-        if call_result.is_err() {
+    pub fn on_close_project_one(&mut self) {
+        if is_promise_success() {
             env::panic_str(ERR012_CLOSE_PROJECT_FAILED);
         }
         self.is_closed = true;
+    }
+
+    pub fn on_close_project_three(&mut self) {
+        require!(env::promise_results_count() == 3, "Contract expected a result on the callback");
+
+        if is_promise_ok(env::promise_result(0)) && is_promise_ok(env::promise_result(1)) && is_promise_ok(env::promise_result(2)) {
+            self.is_closed = true;
+        } else {
+            env::panic_str(ERR012_CLOSE_PROJECT_FAILED);
+        }
     }
 
     pub fn internal_project_token_mint(&mut self, to: AccountId, amount: U128) -> Promise {
         match self.project_token_type {
             ProjectTokenType::NonFungible => ext_nft_collection::ext(self.project_token_id.clone().unwrap())
                 .with_static_gas(Gas(5 * TGAS))
-                .with_attached_deposit(DEPOSIT_NFT_MINT)
+                .with_attached_deposit(DEPOSIT_ONE_NFT_MINT * amount.0)
                 .nft_mint(
                     to,
                     amount,
                 ),
             ProjectTokenType::Fungible => ext_fungible_token::ext(self.project_token_id.clone().unwrap())
                 .with_static_gas(Gas(5 * TGAS))
-                .with_attached_deposit(0u128)
                 .ft_mint(
                     to,
                     amount,
