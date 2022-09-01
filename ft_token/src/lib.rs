@@ -53,12 +53,12 @@ impl Contract {
         }
     }
 
-    pub fn ft_mint(&mut self, receive_id: AccountId, amount: U128) {
+    pub fn ft_mint(&mut self, receiver_id: AccountId, amount: U128) {
         require!(env::predecessor_account_id() == self.owner_id, "UnAuthorized");
 
-        self.token.internal_deposit(&receive_id, amount.0);
+        self.token.internal_deposit(&receiver_id, amount.0);
         FtMint {
-            owner_id: &(receive_id),
+            owner_id: &(receiver_id),
             amount: &amount,
             memo: None
         }.emit();

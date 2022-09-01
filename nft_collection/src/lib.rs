@@ -151,16 +151,15 @@ mod tests {
         // mint
         testing_env!(
             get_context(owner_id.clone())
-                .attached_deposit(677 * env::storage_byte_cost())
+                .attached_deposit(553 * env::storage_byte_cost())
                 .build()
         );
-        contract.nft_mint(accounts(0), 1u128.into());
-        assert_eq!(contract.nft_supply_for_owner(accounts(0)), 1u128.into());
+        contract.nft_mint(accounts(0), 10u128.into());
+        assert_eq!(contract.nft_supply_for_owner(accounts(0)), 10u128.into());
 
         // transfer
         testing_env!(
              get_context(owner_id.clone())
-                .attached_deposit(677 * env::storage_byte_cost())
                 .attached_deposit(1)
                 .build());
         contract.nft_transfer(alice_id.clone(), "0".to_string(), None, None);
