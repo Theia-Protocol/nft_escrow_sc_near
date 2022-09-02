@@ -1,41 +1,41 @@
 1. buy
 
-near call dev-1662102511052-26947222593947 ft_transfer_call '{"receiver_id":"dev-1662123162036-69857308350024","amount":"30000000000000000000000000","memo":"","msg":"buy:10"}' --accountId theia_dev_user1.testnet --deposit 0.000000000000000000000001 --gas 300000000000000
+near call dev-1662102511052-26947222593947 ft_transfer_call '{"receiver_id":"dev-1662124956162-72178102604316","amount":"30000000000000000000000000","memo":"","msg":"buy:10"}' --accountId theia_dev_user1.testnet --deposit 0.000000000000000000000001 --gas 300000000000000
 
 2. sell
 
-near call dev-1662123162036-69857308350024 sell '{"token_ids":["15","16","17","18","19","20","21","22","23","24"]}' --accountId theia_dev_user1.testnet --gas 300000000000000
+near call dev-1662124956162-72178102604316 sell '{"token_ids":["15","16","17","18","19","20","21","22","23","24"]}' --accountId theia_dev_user1.testnet --gas 300000000000000
 
 3. convert
 
-near call dev-1662123162036-69857308350024 convert '{"token_ids":["15","16","17","18","19","20","21","22","23","24"]}' --accountId theia_dev_user2.testnet --gas 300000000000000
+near call dev-1662124956162-72178102604316 convert '{"token_ids":["15","16","17","18","19","20","21","22","23","24"]}' --accountId theia_dev_user2.testnet --gas 300000000000000
 
 4. claim fund
 
-near call dev-1662123162036-69857308350024 claim_fund '{"to":"theia_owner.testnet","amount":"100"}' --accountId theia_owner.testnet
+near call dev-1662124956162-72178102604316 claim_fund '{"to":"theia_owner.testnet","amount":"100"}' --accountId theia_owner.testnet
 
 5. close project
 
-near call dev-1662123162036-69857308350024 close_project '{}' --accountId theia_owner.testnet
+near call dev-1662124956162-72178102604316 close_project '{}' --accountId theia_owner.testnet
 
 
 
 views
 
 1. proxy token
-near view dev-1662123162036-69857308350024 get_proxy_token_id
+near view dev-1662124956162-72178102604316 get_proxy_token_id
 
 2. project token
-near view dev-1662123162036-69857308350024 get_project_token_id
+near view dev-1662124956162-72178102604316 get_project_token_id
 
 3. calculate for buying proxy token
-near view dev-1662123162036-69857308350024 calculate_buy_proxy_token '{"amount":"10"}'
+near view dev-1662124956162-72178102604316 calculate_buy_proxy_token '{"amount":"10"}'
 
 4. calculate for selling proxy token
-near view dev-1662123162036-69857308350024 calculate_sell_proxy_token '{"token_ids":["11","12","13","14","15"]}'
+near view dev-1662124956162-72178102604316 calculate_sell_proxy_token '{"token_ids":["11","12","13","14","15"]}'
 
 5. proxy token Balance
-near view ptheiacollection1.dev-1662123162036-69857308350024 mt_balance_of '{"owner":"theia_dev_user2.testnet","id":["15","16","17","18","19"]}'
+near view theiacollection1.dev-1662124956162-72178102604316 mt_balance_of '{"owner":"theia_dev_user2.testnet","id":["15","16","17","18","19"]}'
 
 6. register account to project token (fungible token)
-near call theiacollection1.dev-1662123162036-69857308350024 storage_deposit '{"account_id":"theia_dev_user1.testnet"}' --deposit 0.01 --accountId theia_owner.testnet
+near call theiacollection1.dev-1662124956162-72178102604316 storage_deposit '{"account_id":"theia_dev_user1.testnet"}' --deposit 0.01 --accountId theia_owner.testnet

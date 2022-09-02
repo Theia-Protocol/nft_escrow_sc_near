@@ -10,7 +10,7 @@ mod token_receiver;
 use near_contract_standards::non_fungible_token::TokenId;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::env::STORAGE_PRICE_PER_BYTE;
-use near_sdk::{env, near_bindgen, AccountId, Balance, PanicOnDefault, Promise, Gas, is_promise_success, log, require};
+use near_sdk::{env, near_bindgen, AccountId, Balance, PanicOnDefault, Promise, Gas, log, require};
 use near_sdk::json_types::U128;
 use near_sdk::serde_json::json;
 use crate::errors::*;
@@ -54,7 +54,9 @@ pub struct Contract {
     /// Pre-mint amount
     pre_mint_amount: Balance,
     /// Amount of converted proxy token
-    converted_proxy_token_amount: Balance,
+    converted_amount: Balance,
+    /// Circulating supply of proxy token
+    circulating_supply: Balance,
     /// Auction curve type
     curve_type: CurveType,
     /// Auction curve args
@@ -104,7 +106,8 @@ impl Contract {
             stable_coin_decimals,
             total_fund_amount: 0,
             pre_mint_amount: 0,
-            converted_proxy_token_amount: 0,
+            converted_amount: 0,
+            circulating_supply: 0,
             curve_type,
             curve_args,
             state: RunningState::Running,
@@ -223,7 +226,8 @@ impl Contract {
                 json!({
                     "owner_id": env::current_account_id(),
                     "name": name.clone(),
-                    "symbol": symbol.clone()
+                    "symbol": symbol.clone(),
+                    "decimals": 1u8
                 }).to_string().as_bytes().to_vec(),
                 NO_DEPOSIT,
                 Gas(5 * TGAS)
@@ -314,31 +318,46 @@ impl Contract {
                 None,
             );
 
-        //Mint proxy token to customer
+        // Mint proxy token to customer
         let proxy_token_mint_promise = ext_proxy_token::ext(self.proxy_token_id.clone().unwrap())
             .with_static_gas(GAS_PROXY_TOKEN_MINT)
             .with_attached_deposit(DEPOSIT_ONE_PROXY_TOKEN_MINT * amount.0)
             .mt_mint(
-                from,
+                from.clone(),
                 amount,
             );
+
+        // update circulating supply
+        self.circulating_supply += amount.0;
+        let remain_amount = cal_coin_amount - amount.0;
 
         treasury_promise.and(proxy_token_mint_promise).then(
                 ext_self::ext(env::current_account_id())
                     .with_static_gas(Gas(5 * TGAS))
-                    .on_action()
+                    .on_buy(from, U128(remain_amount))
             )
     }
 
     #[private]
-    pub fn on_action(&mut self) -> bool {
+    pub fn on_buy(&mut self, from: AccountId, remain: U128) -> bool {
         require!(env::promise_results_count() == 2, "Contract expected a result on the callback");
 
         if is_promise_ok(env::promise_result(0)) && is_promise_ok(env::promise_result(1)) {
-            true
+            if remain.0 > 0 {
+                ext_fungible_token::ext(self.stable_coin_id.clone())
+                    .with_static_gas(GAS_FOR_FT_TRANSFER)
+                    .with_attached_deposit(ONE_YOCTO)
+                    .ft_transfer(
+                        from,
+                        remain,
+                        None,
+                    );
+            }
         } else {
             env::panic_str(ERR016_ACTION_FAILED);
         }
+
+        true
     }
 
     /// sell proxy token
@@ -350,6 +369,8 @@ impl Contract {
         assert!(cal_coin_amount > 0, "{}", ERR09_INVALID_ACTION);
 
         self.total_fund_amount = self.total_fund_amount.checked_sub(cal_coin_amount).unwrap();
+        // update circulating supply
+        self.circulating_supply -= token_ids.len() as u128;
 
         // Transfer stable coin to customer
         ext_fungible_token::ext(self.stable_coin_id.clone())
@@ -372,8 +393,19 @@ impl Contract {
             .then(
                 ext_self::ext(env::current_account_id())
                 .with_static_gas(Gas(5 * TGAS))
-                .on_action()
+                .on_sell()
             )
+    }
+
+    #[private]
+    pub fn on_sell(&mut self) -> bool {
+        require!(env::promise_results_count() == 2, "Contract expected a result on the callback");
+
+        if is_promise_ok(env::promise_result(0)) && is_promise_ok(env::promise_result(1)) {
+            true
+        } else {
+            env::panic_str(ERR016_ACTION_FAILED);
+        }
     }
 
     /// convert proxy token to real token
@@ -408,14 +440,19 @@ impl Contract {
     }
 
     #[private]
-    pub fn on_convert(&mut self, converted_amount: Balance) {
-        require!(env::promise_results_count() == 2, "Contract expected a result on the callback");
+    pub fn on_convert(&mut self, amount: Balance) {
+        let result_count = env::promise_results_count();
+        require!(result_count > 0, "Contract expected a result on the callback");
 
-        if is_promise_ok(env::promise_result(0)) && is_promise_ok(env::promise_result(1)) {
-            self.converted_proxy_token_amount = self.converted_proxy_token_amount.checked_add(converted_amount).unwrap();
-        } else {
-            env::panic_str(ERR014_CONVERT_FAILED);
+        let mut result_index = 0;
+        while result_index < result_count {
+            if !is_promise_ok(env::promise_result(result_index)) {
+                env::panic_str(ERR014_CONVERT_FAILED);
+            }
+            result_index += 1;
         }
+        
+        self.converted_amount = self.converted_amount.checked_add(amount).unwrap();
     }
 
     /// claim fund
@@ -455,11 +492,11 @@ impl Contract {
     }
 
     #[private]
-    pub fn on_claim_fund(&mut self, claimed_amount: U128) {
+    pub fn on_claim_fund(&mut self, amount: U128) {
         require!(env::promise_results_count() == 2, "Contract expected a result on the callback");
 
         if is_promise_ok(env::promise_result(0)) && is_promise_ok(env::promise_result(1)) {
-            self.total_fund_amount -= claimed_amount.0;
+            self.total_fund_amount -= amount.0;
         } else {
             env::panic_str(ERR017_CLAIM_FUND_FAILED);
         }
@@ -478,7 +515,7 @@ impl Contract {
 
         assert_eq!(self.is_closed, false, "{}", ERR013_ALREADY_CLOSED);
 
-        let transfer_owner = match self.project_token_type {
+        let transfer_owner_promise = match self.project_token_type {
             ProjectTokenType::Fungible => ext_fungible_token::ext(self.project_token_id.clone().unwrap())
                 .with_static_gas(Gas(5 * TGAS))
                 .set_owner(self.owner_id.clone()),
@@ -488,48 +525,54 @@ impl Contract {
         };
 
         if self.pre_mint_amount > 0 {
-            let pre_mint = self.internal_project_token_mint(self.owner_id.clone(), U128::from(self.pre_mint_amount));
+            let mut mint_promise = self.internal_project_token_mint(self.owner_id.clone(), U128::from(self.pre_mint_amount));
+
+            let remain_proxys = self.circulating_supply.checked_sub(self.converted_amount).unwrap();
+            if remain_proxys > 0 {
+                mint_promise = mint_promise.and(
+                    self.internal_project_token_mint(env::current_account_id(), U128::from(remain_proxys))
+                )
+            }
+
             let token_ids = (0..self.pre_mint_amount - 1).enumerate().map(|(_, token_id)| { token_id.to_string() }).collect();
-            let burn_batch = ext_proxy_token::ext(self.proxy_token_id.clone().unwrap())
+            let burn_batch_promise = ext_proxy_token::ext(self.proxy_token_id.clone().unwrap())
                 .with_static_gas(Gas(5 * TGAS))
                 .mt_burn(
                     self.owner_id.clone(),
                     token_ids,
                 );
-            burn_batch
-                .and(pre_mint)
-                .and(transfer_owner)
+        
+            mint_promise
+                .and(burn_batch_promise)
+                .and(transfer_owner_promise)
                 .then(  
                     ext_self::ext(env::current_account_id())
                         .with_static_gas(Gas(5 * TGAS))
-                        .on_close_project_three()
+                        .on_close_project()
                 )
         } else {
-            transfer_owner
+            transfer_owner_promise
                 .then(  
                     ext_self::ext(env::current_account_id())
                         .with_static_gas(Gas(5 * TGAS))
-                        .on_close_project_one()
+                        .on_close_project()
                 )
         }
     }
 
-    #[private]
-    pub fn on_close_project_one(&mut self) {
-        if is_promise_success() {
-            env::panic_str(ERR012_CLOSE_PROJECT_FAILED);
+    pub fn on_close_project(&mut self) {
+        let result_count = env::promise_results_count();
+        require!(result_count > 0, "Contract expected a result on the callback");
+
+        let mut result_index = 0;
+        while result_index < result_count {
+            if !is_promise_ok(env::promise_result(result_index)) {
+                env::panic_str(ERR012_CLOSE_PROJECT_FAILED);
+            }
+            result_index += 1;
         }
+
         self.is_closed = true;
-    }
-
-    pub fn on_close_project_three(&mut self) {
-        require!(env::promise_results_count() == 3, "Contract expected a result on the callback");
-
-        if is_promise_ok(env::promise_result(0)) && is_promise_ok(env::promise_result(1)) && is_promise_ok(env::promise_result(2)) {
-            self.is_closed = true;
-        } else {
-            env::panic_str(ERR012_CLOSE_PROJECT_FAILED);
-        }
     }
 
     pub fn internal_project_token_mint(&mut self, to: AccountId, amount: U128) -> Promise {
@@ -553,18 +596,19 @@ impl Contract {
     pub fn internal_convert_transfer(&mut self, to: AccountId, amount: u128) -> Promise {
         match self.project_token_type {
             ProjectTokenType::NonFungible => {
+                let token_id: TokenId = (self.pre_mint_amount + self.converted_amount).to_string();
                 let mut promise = ext_nft_collection::ext(self.project_token_id.clone().unwrap())
                     .with_static_gas(Gas(5 * TGAS))
                     .with_attached_deposit(ONE_YOCTO)
                     .nft_transfer(
                         to.clone(),
-                        (self.pre_mint_amount + self.converted_proxy_token_amount).to_string(),
+                        token_id,
                         None,
-                        None,
+                        Some("".to_string()),
                     );
                 let mut id = 1;
                 while id < amount {
-                    let token_id: TokenId = (self.pre_mint_amount + self.converted_proxy_token_amount + id).to_string();
+                    let token_id: TokenId = (self.pre_mint_amount + self.converted_amount + id).to_string();
                     promise = promise.and(ext_nft_collection::ext(self.project_token_id.clone().unwrap())
                         .with_static_gas(Gas(5 * TGAS))
                         .with_attached_deposit(ONE_YOCTO)

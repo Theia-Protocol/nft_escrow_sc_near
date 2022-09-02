@@ -73,10 +73,8 @@ impl Contract {
     }
 
     pub fn calculate_buy_proxy_token(&self, amount: U128) -> u128 {
-        let circulating_supply = 0u128;
-
-        self.get_sum_price(circulating_supply.checked_add(amount.0).unwrap())
-            .checked_sub(self.get_sum_price(circulating_supply))
+        self.get_sum_price(self.circulating_supply.checked_add(amount.0).unwrap())
+            .checked_sub(self.get_sum_price(self.circulating_supply))
             .unwrap()
     }
 

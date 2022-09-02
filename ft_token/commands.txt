@@ -1,6 +1,6 @@
 1. register account
 
-near call dev-1662102511052-26947222593947 storage_deposit '{"account_id":"dev-1662123162036-69857308350024"}' --deposit 0.01 --accountId theia_owner.testnet
+near call dev-1662102511052-26947222593947 storage_deposit '{"account_id":"dev-1662124956162-72178102604316"}' --deposit 0.01 --accountId theia_owner.testnet
 
 2. token mint
 

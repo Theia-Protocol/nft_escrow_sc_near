@@ -30,7 +30,7 @@ async fn init(
     let stable_coin_contract = worker.dev_deploy(FUNGIBLE_TOKEN_CODE).await?;
     let res = stable_coin_contract
         .call(&worker, "new")
-        .args_json((owner.id(), String::from("USD Tether"), String::from("USDT")))?
+        .args_json((owner.id(), String::from("USD Tether"), String::from("USDT"), 24u8))?
         .max_gas()
         .transact()
         .await?;
@@ -488,7 +488,7 @@ async fn test_nft_buy() -> anyhow::Result<()> {
     // println!("active: {:?}", _res);
 
     // calculate stable coin amount for buying proxy token
-    let amount = U128::from(50u128);
+    let amount = U128::from(10u128);
     let coin_amount = escrow_contract
         .view(
             &worker,
@@ -555,7 +555,7 @@ async fn test_ft_buy() -> anyhow::Result<()> {
     // println!("active: {:?}", _res);
 
     // calculate stable coin amount for buying proxy token
-    let amount = U128::from(100u128);
+    let amount = U128::from(10u128);
     let coin_amount = escrow_contract
         .view(
             &worker,
@@ -612,7 +612,7 @@ async fn test_sell() -> anyhow::Result<()> {
     let (escrow_contract, stable_coin_contract, owner, _, _, finder, _, _) = init(&worker).await?;
 
     // active project
-    let res = owner
+    let _res = owner
         .call(&worker, escrow_contract.id(), "active_nft_project")
         .args_json((NAME, SYMBOL, NFT_BASE_URI, NFT_BLANK_URI, NFT_MAX_SUPPLY, finder.id(), PRE_MINT_AMOUNT, FUND_THRESHOLD, FIVE_MINUTES, TEN_MINUTES))?
         .max_gas()
@@ -692,14 +692,14 @@ async fn test_nft_convert() -> anyhow::Result<()> {
     let (escrow_contract, stable_coin_contract, owner, _, _, finder, _, _) = init(&worker).await?;
 
     // active project
-    let res = owner
+    let _res = owner
         .call(&worker, escrow_contract.id(), "active_nft_project")
         .args_json((NAME, SYMBOL, NFT_BASE_URI, NFT_BLANK_URI, NFT_MAX_SUPPLY, finder.id(), PRE_MINT_AMOUNT, FUND_THRESHOLD, FIVE_MINUTES, TEN_MINUTES))?
         .max_gas()
         .transact()
         .await?;
 
-    // println!("active: {:?}", res);
+    // println!("active: {:?}", _res);
 
     //buy proxy token
     //calculate stable coin amount for buying proxy token
@@ -715,7 +715,7 @@ async fn test_nft_convert() -> anyhow::Result<()> {
         .await?
         .json::<u128>()?;
 
-    let res = owner
+    let _res = owner
         .call(&worker, stable_coin_contract.id(), "ft_transfer_call".into())
         .args_json((escrow_contract.id(), U128(coin_amount), Option::<String>::None, format!("buy:{}", amount.0)))?
         .deposit(1u128)
@@ -733,7 +733,7 @@ async fn test_nft_convert() -> anyhow::Result<()> {
         .transact()
         .await?;
     assert!(res.is_success());
-    // println!("convert: {:?}", res);
+    println!("convert: {:?}", res);
 
     Ok(())
 }
@@ -907,7 +907,7 @@ async fn test_close_nft_project() -> anyhow::Result<()> {
     let (escrow_contract, stable_coin_contract, owner, alice, _, finder, _, _) = init(&worker).await?;
 
     // active project
-    let res = owner
+    let _res = owner
         .call(&worker, escrow_contract.id(), "active_nft_project")
         .args_json((NAME, SYMBOL, NFT_BASE_URI, NFT_BLANK_URI, NFT_MAX_SUPPLY, finder.id(), PRE_MINT_AMOUNT, FUND_THRESHOLD, FIVE_MINUTES, TEN_MINUTES))?
         .max_gas()
@@ -962,6 +962,81 @@ async fn test_close_nft_project() -> anyhow::Result<()> {
     assert!(res.is_success());
 
     // println!("close project: {:?}", res);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_convert_after_closing_nft_project() -> anyhow::Result<()> {
+    let worker = workspaces::sandbox().await?;
+    let (escrow_contract, stable_coin_contract, owner, alice, _, finder, _, _) = init(&worker).await?;
+
+    // active project
+    let _res = owner
+        .call(&worker, escrow_contract.id(), "active_nft_project")
+        .args_json((NAME, SYMBOL, NFT_BASE_URI, NFT_BLANK_URI, NFT_MAX_SUPPLY, finder.id(), PRE_MINT_AMOUNT, FUND_THRESHOLD, FIVE_MINUTES, TEN_MINUTES))?
+        .max_gas()
+        .transact()
+        .await?;
+
+    // println!("active: {:?}", res);
+
+    //buy proxy token
+    //calculate stable coin amount for buying proxy token
+    let amount = U128::from(10u128);
+    let coin_amount = escrow_contract
+        .view(
+            &worker,
+            "calculate_buy_proxy_token",
+            json!({
+            "amount": amount
+        }).to_string().into_bytes(),
+        )
+        .await?
+        .json::<u128>()?;
+
+    let _res = alice
+        .call(&worker, stable_coin_contract.id(), "ft_transfer_call".into())
+        .args_json((escrow_contract.id(), U128(coin_amount), Option::<String>::None, format!("buy:{}", amount.0)))?
+        .deposit(1u128)
+        .max_gas()
+        .transact() 
+        .await?;
+
+    worker.fast_forward(400).await?;
+    
+    // convert
+    let res = alice
+        .call(&worker, escrow_contract.id(), "convert")
+        .args(json!({"token_ids": vec![2.to_string()]}).to_string().as_bytes().to_vec())
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(res.is_success());
+    // println!("convert: {:?}", res);
+
+    worker.fast_forward(800).await?;
+
+    // close project
+    let res = owner
+        .call(&worker, escrow_contract.id(), "close_project")
+        .args_json(json!({}).to_string().as_bytes().to_vec())?
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(res.is_success());
+
+    // println!("close project!");
+
+    let res = alice
+        .call(&worker, escrow_contract.id(), "convert")
+        .args(json!({"token_ids": vec![3.to_string(),4.to_string(),5.to_string()]}).to_string().as_bytes().to_vec())
+        .max_gas()
+        .transact()
+        .await?;
+    assert!(res.is_success());
+
+    // println!("convert: {:?}", res);
 
     Ok(())
 }

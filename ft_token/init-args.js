@@ -7,5 +7,6 @@ const ONE_NEAR = BigInt(1e12) ** 2n;
 const owner_id = "theia_owner.testnet";
 const name = "USD Tether";
 const symbol = "USDT";
+const decimals = "24";
 
-console.log(JSON.stringify({owner_id, name, symbol}));
+console.log(JSON.stringify({owner_id, name, symbol, decimals}));

@@ -32,7 +32,7 @@ impl Contract {
     /// Initializes the contract with the given total supply owned by the given `owner_id` with
     /// the given fungible token metadata.
     #[init]
-    pub fn new(owner_id: AccountId, name: String, symbol: String) -> Self {
+    pub fn new(owner_id: AccountId, name: String, symbol: String, decimals: u8) -> Self {
         require!(!env::state_exists(), "Already initialized");
 
         let metadata = FungibleTokenMetadata {
@@ -42,7 +42,7 @@ impl Contract {
             icon: None,
             reference: None,
             reference_hash: None,
-            decimals: 24,
+            decimals,
         };
         metadata.assert_valid();
 

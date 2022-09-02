@@ -84,11 +84,11 @@ pub trait SelfCallbacks {
         project_token_id: AccountId,
         proxy_token_id: AccountId
     ) -> PromiseOrValue<bool>;
-    fn on_action(&mut self);
-    fn on_convert(&mut self, converted_amount: Balance);
-    fn on_claim_fund(&mut self, claimed_amount: U128);
-    fn on_close_project_one(&mut self);
-    fn on_close_project_three(&mut self);
+    fn on_buy(&mut self, from: AccountId, remain: U128) -> bool;
+    fn on_sell(&mut self);
+    fn on_convert(&mut self, amount: Balance);
+    fn on_claim_fund(&mut self, amount: U128);
+    fn on_close_project(&mut self);
 }
 
 #[ext_contract(ext_nft_collection)]
