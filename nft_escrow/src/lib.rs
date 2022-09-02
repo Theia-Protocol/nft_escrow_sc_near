@@ -65,16 +65,15 @@ pub struct Contract {
     is_closed: bool,
 }
 
-// 
-const MIN_STORAGE_NON_FUNGIBLE_TOKEN: Balance = 7_000_000_000_000_000_000_000_000;
-//1.1Ⓝ
-const MIN_STORAGE_FUNGIBLE_TOKEN: Balance = 4_100_000_000_000_000_000_000_000;
-const MIN_STORAGE_PROXY_TOKEN : Balance = 7_500_000_000_000_000_000_000_000;
-const DEPOSIT_ONE_PROXY_TOKEN_MINT: Balance = 4_100_000_000_000_000_000_000_000;
+const MIN_STORAGE_NON_FUNGIBLE_TOKEN: Balance = 600_000 * STORAGE_PRICE_PER_BYTE;
+const MIN_STORAGE_FUNGIBLE_TOKEN: Balance = 600_000 * STORAGE_PRICE_PER_BYTE;
+const MIN_STORAGE_PROXY_TOKEN : Balance = 400_000 * STORAGE_PRICE_PER_BYTE;
+const DEPOSIT_ONE_PROXY_TOKEN_MINT: Balance = 640 * STORAGE_PRICE_PER_BYTE;
 const DEPOSIT_ONE_NFT_MINT: Balance = 638 * STORAGE_PRICE_PER_BYTE;
 const NO_DEPOSIT: Balance = 0u128;
 const ONE_YOCTO: Balance = 1u128;
 const TGAS: u64 = 1_000_000_000_000;
+const GAS_PROXY_TOKEN_MINT: Gas = Gas(100 * TGAS);
 
 const PROXY_TOKEN_CODE: &[u8] = include_bytes!("../../target/wasm32-unknown-unknown/release/proxy_token.wasm");
 const NFT_COLLECTION_CODE: &[u8] = include_bytes!("../../target/wasm32-unknown-unknown/release/nft_collection.wasm");
@@ -114,20 +113,20 @@ impl Contract {
     }
 
     /// Active NFT project
-    pub fn active_nft_project(&mut self, name: String, symbol: String, base_uri: String, blank_media_uri: String, max_supply: Balance, finder_id: AccountId, pre_mint_amount: Balance, fund_threshold: Balance, buffer_period: u64, conversion_period: u64) -> Promise {
+    pub fn active_nft_project(&mut self, name: String, symbol: String, base_uri: String, blank_media_uri: String, max_supply: U128, finder_id: AccountId, pre_mint_amount: U128, fund_threshold: U128, buffer_period: u64, conversion_period: u64) -> Promise {
         self.assert_owner();
         assert_eq!(self.is_closed, false, "{}", ERR013_ALREADY_CLOSED);
         assert!(name.len() > 2, "{}", ERR00_INVALID_NAME);
         assert!(symbol.len() < 13 && symbol.len() > 2, "{}", ERR01_INVALID_SYMBOL);
         assert!(base_uri.len() > 0, "{}", ERR02_INVALID_COLLECTION_BASE_URI);
         assert!(blank_media_uri.len() > 0, "{}", ERR03_INVALID_BLANK_URI);
-        assert!(max_supply > 0, "{}", ERR04_INVALID_MAX_SUPPLY);
-        assert!(fund_threshold > 0, "{}", ERR05_INVALID_FUNDING_TARGET);
+        assert!(max_supply.0 > 0, "{}", ERR04_INVALID_MAX_SUPPLY);
+        assert!(fund_threshold.0 > 0, "{}", ERR05_INVALID_FUNDING_TARGET);
         assert!(conversion_period >= 86400, "{}", ERR06_INVALID_CONVERSION_PERIOD);
 
         self.finder_id = Some(finder_id);
-        self.fund_threshold = fund_threshold;
-        self.pre_mint_amount = pre_mint_amount;
+        self.fund_threshold = fund_threshold.0;
+        self.pre_mint_amount = pre_mint_amount.0;
         self.buffer_period = buffer_period;
         self.conversion_period = conversion_period;
         self.start_timestamp = env::block_timestamp();
@@ -150,7 +149,7 @@ impl Contract {
                     "name": name.clone(),
                     "symbol": symbol.clone(),
                     "base_uri": base_uri,
-                    "max_supply": U128::from(max_supply)
+                    "max_supply": max_supply
                 }).to_string().as_bytes().to_vec(),
                 NO_DEPOSIT,
                 Gas(5 * TGAS)
@@ -168,7 +167,7 @@ impl Contract {
                         "name": name,
                         "symbol": symbol,
                         "blank_media_uri": blank_media_uri,
-                        "max_supply": U128::from(max_supply)
+                        "max_supply": max_supply
                     }).to_string().as_bytes().to_vec(),
                 NO_DEPOSIT,
                 Gas(5 * TGAS)
@@ -177,10 +176,10 @@ impl Contract {
                 "mt_mint".to_string(),
                 json!({
                         "receiver_id": self.owner_id.clone(),
-                        "amount": U128::from(pre_mint_amount)
+                        "amount": pre_mint_amount
                     }).to_string().as_bytes().to_vec(),
-                    DEPOSIT_ONE_PROXY_TOKEN_MINT,
-                Gas(5 * TGAS)
+                    DEPOSIT_ONE_PROXY_TOKEN_MINT * pre_mint_amount.0,
+                GAS_PROXY_TOKEN_MINT
             );
 
         project_token_promise
@@ -191,19 +190,19 @@ impl Contract {
     }
 
     /// Active FT project
-    pub fn active_ft_project(&mut self, name: String, symbol: String, blank_media_uri: String, max_supply: Balance, finder_id: AccountId, pre_mint_amount: Balance, fund_threshold: Balance, buffer_period: u64, conversion_period: u64) -> Promise {
+    pub fn active_ft_project(&mut self, name: String, symbol: String, blank_media_uri: String, max_supply: U128, finder_id: AccountId, pre_mint_amount: U128, fund_threshold: U128, buffer_period: u64, conversion_period: u64) -> Promise {
         self.assert_owner();
         assert_eq!(self.is_closed, false, "{}", ERR013_ALREADY_CLOSED);
         assert!(name.len() > 2, "{}", ERR00_INVALID_NAME);
         assert!(symbol.len() < 13 && symbol.len() > 2, "{}", ERR01_INVALID_SYMBOL);
         assert!(blank_media_uri.len() > 0, "{}", ERR03_INVALID_BLANK_URI);
-        assert!(max_supply > 0, "{}", ERR04_INVALID_MAX_SUPPLY);
-        assert!(fund_threshold > 0, "{}", ERR05_INVALID_FUNDING_TARGET);
+        assert!(max_supply.0 > 0, "{}", ERR04_INVALID_MAX_SUPPLY);
+        assert!(fund_threshold.0 > 0, "{}", ERR05_INVALID_FUNDING_TARGET);
         assert!(conversion_period >= 86400, "{}", ERR06_INVALID_CONVERSION_PERIOD);
 
         self.finder_id = Some(finder_id);
-        self.fund_threshold = fund_threshold;
-        self.pre_mint_amount = pre_mint_amount;
+        self.fund_threshold = fund_threshold.0;
+        self.pre_mint_amount = pre_mint_amount.0;
         self.buffer_period = buffer_period;
         self.conversion_period = conversion_period;
         self.start_timestamp = env::block_timestamp();
@@ -242,7 +241,7 @@ impl Contract {
                         "name": name,
                         "symbol": symbol,
                         "blank_media_uri": blank_media_uri,
-                        "max_supply": U128::from(max_supply)
+                        "max_supply": max_supply
                     }).to_string().as_bytes().to_vec(),
                 NO_DEPOSIT,
                 Gas(5 * TGAS)
@@ -251,10 +250,10 @@ impl Contract {
                 "mt_mint".to_string(),
                 json!({
                         "receiver_id": self.owner_id.clone(),
-                        "amount": U128::from(pre_mint_amount)
+                        "amount": pre_mint_amount
                     }).to_string().as_bytes().to_vec(),
-                    DEPOSIT_ONE_PROXY_TOKEN_MINT * pre_mint_amount,
-                Gas(5 * TGAS)
+                    DEPOSIT_ONE_PROXY_TOKEN_MINT * pre_mint_amount.0,
+                GAS_PROXY_TOKEN_MINT
             );
 
         project_token_promise.and(proxy_token_promise).then(
@@ -317,7 +316,7 @@ impl Contract {
 
         //Mint proxy token to customer
         let proxy_token_mint_promise = ext_proxy_token::ext(self.proxy_token_id.clone().unwrap())
-            .with_static_gas(Gas(5 * TGAS))
+            .with_static_gas(GAS_PROXY_TOKEN_MINT)
             .with_attached_deposit(DEPOSIT_ONE_PROXY_TOKEN_MINT * amount.0)
             .mt_mint(
                 from,
@@ -536,14 +535,14 @@ impl Contract {
     pub fn internal_project_token_mint(&mut self, to: AccountId, amount: U128) -> Promise {
         match self.project_token_type {
             ProjectTokenType::NonFungible => ext_nft_collection::ext(self.project_token_id.clone().unwrap())
-                .with_static_gas(Gas(5 * TGAS))
+                .with_static_gas(Gas(100 * TGAS))
                 .with_attached_deposit(DEPOSIT_ONE_NFT_MINT * amount.0)
                 .nft_mint(
                     to,
                     amount,
                 ),
             ProjectTokenType::Fungible => ext_fungible_token::ext(self.project_token_id.clone().unwrap())
-                .with_static_gas(Gas(5 * TGAS))
+                .with_static_gas(Gas(100 * TGAS))
                 .ft_mint(
                     to,
                     amount,

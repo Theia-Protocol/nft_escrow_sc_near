@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-WASM_PATH="$(find ./target/wasm32-unknown-unknown/release/ -maxdepth 1 -name "*.wasm")"
+WASM_PATH="$(find ../target/wasm32-unknown-unknown/release/nft_escrow_sc.wasm)"
 
 near dev-deploy \
   --wasmFile $WASM_PATH \

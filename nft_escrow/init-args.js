@@ -1,26 +1,15 @@
-const ONE_DAY = 1_000_000_000 * 60 * 60 * 24;
+const CURVE_TYPE_HORIZONTAL = 'Horizontal';
+const CURVE_TYPE_LINEAR = 'Linear';
+const CURVE_TYPE_SIGMOIDAL = 'Sigmoidal';
 
-// 1e24, calculated like this because JS numbers don't work that large
-const ONE_NEAR = BigInt(1e12) ** 2n;
+// initialize
+const owner_id = "theia_owner.testnet";
+const stable_coin_id = "dev-1662102511052-26947222593947";
+const stable_coin_decimals = 24;
+const curve_type = CURVE_TYPE_HORIZONTAL;
+const curve_args = {
+    arg_a: 3
+};
+const treasury_id = "theia_owner.testnet";
 
-// Nft collection
-// const owner_id = "hosokawa.testnet";
-// const name = "NFT Collection 1";
-// const symbol = "NCC";
-// const base_uri = "https://ipfs.io/ipfs/QmV33AikTkQqS6vYokx9kafzCme84RsKpwZxPnV4SwC4xj/";
-// const max_supply = 30;
-// media_base_uri = "https://ipfs.io/ipfs/QmV33AikTkQqS6vYokx9kafzCme84RsKpwZxPnV4SwC4xj/";
-// const description = "Real Non fungible token collection";
-//
-// console.log(JSON.stringify({owner_id, name, symbol, base_uri, max_supply, media_base_uri, description}));
-
-
-// Proxy NFT
-const owner_id = "hosokawa.testnet";
-const name = "Proxy NFT 1";
-const symbol = "PNT";
-const blank_media_uri = "https://ipfs.io/ipfs/QmV33AikTkQqS6vYokx9kafzCme84RsKpwZxPnV4SwC4xj";
-const max_supply = 30;
-const description = "Proxy Non fungible token"
-
-console.log(JSON.stringify({owner_id, name, symbol, blank_media_uri, max_supply, description}));
+console.log(JSON.stringify({owner_id, stable_coin_id, stable_coin_decimals, curve_type, curve_args, treasury_id}));
