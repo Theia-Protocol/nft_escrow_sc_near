@@ -11,7 +11,7 @@ const blank_media_uri = "https://ipfs.io/ipfs/QmZRBnIklexQCvEmQxZ1CDqczgXcy7hatu
 const max_supply = "1000";
 const finder_id = "hosokawa_test1.testnet";
 const pre_mint_amount = "10";
-const fund_threshold = (ONE_NEAR * 200n).toString();     // 200 NEAR
+const fund_threshold = (ONE_NEAR * 15n).toString();     // 200 NEAR
 const buffer_period = 0;
 const conversion_period = 1800 * 1_000_000_000; // 30 min
 

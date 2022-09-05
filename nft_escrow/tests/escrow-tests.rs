@@ -195,28 +195,14 @@ async fn test_auction_curve_horizontal() -> anyhow::Result<()> {
 
     assert_eq!(&_curve_args.arg_a, &curve_args.arg_a);
 
-    let mut token_price =
-        escrow_contract
-            .view(
-                &worker,
-                "get_token_price",
-                json!({
-                    "token_id": U128::from(1u128)
-                }).to_string().into_bytes(),
-            )
-            .await?
-            .json::<u128>()?;
-
-    assert_eq!(token_price / one_coin, BASE_TOKEN_PRICE);
-
     for token_id in 1..10 {
-        token_price =
+        let token_price =
             escrow_contract
                 .view(
                     &worker,
                     "get_token_price",
                     json!({
-                        "token_id": U128::from(token_id as u128)
+                        "token_id": U128::from(token_id as u128 + PRE_MINT_AMOUNT.0) 
                     }).to_string().into_bytes(),
                 )
                 .await?
@@ -244,7 +230,7 @@ async fn test_auction_curve_horizontal() -> anyhow::Result<()> {
 
     println!("-- Sell Price --");
     for token_id in 0..10 {
-        let token_ids: Vec<String> = vec![token_id.to_string()];
+        let token_ids: Vec<String> = vec![(token_id + PRE_MINT_AMOUNT.0).to_string()];
         let buy_price =
             escrow_contract
                 .view(
@@ -319,7 +305,7 @@ async fn test_auction_curve_linear() -> anyhow::Result<()> {
                     &worker,
                     "get_token_price",
                     json!({
-                        "token_id": U128::from(token_id as u128)
+                        "token_id": U128::from(token_id as u128 + PRE_MINT_AMOUNT.0)
                     }).to_string().into_bytes(),
                 )
                 .await?
@@ -347,7 +333,7 @@ async fn test_auction_curve_linear() -> anyhow::Result<()> {
 
     println!("-- Sell Price --");
     for token_id in 0..10 {
-        let token_ids: Vec<String> = vec![token_id.to_string()];
+        let token_ids: Vec<String> = vec![(token_id + PRE_MINT_AMOUNT.0).to_string()];
         let buy_price =
             escrow_contract
                 .view(
@@ -426,7 +412,7 @@ async fn test_auction_curve_sigmoidal() -> anyhow::Result<()> {
                     &worker,
                     "get_token_price",
                     json!({
-                        "token_id": U128::from(token_id as u128)
+                        "token_id": U128::from(token_id as u128 + PRE_MINT_AMOUNT.0)
                     }).to_string().into_bytes(),
                 )
                 .await?
@@ -454,7 +440,7 @@ async fn test_auction_curve_sigmoidal() -> anyhow::Result<()> {
 
     println!("-- Sell Price --");
     for token_id in 0..10 {
-        let token_ids: Vec<String> = vec![token_id.to_string()];
+        let token_ids: Vec<String> = vec![(token_id + PRE_MINT_AMOUNT.0).to_string()];
         let buy_price =
             escrow_contract
                 .view(
@@ -510,7 +496,7 @@ async fn test_nft_buy() -> anyhow::Result<()> {
         .await?;
 
     assert!(res.is_success());
-    println!("buy: {:?}", res);
+    // println!("buy: {:?}", res);
     
     let balance = stable_coin_contract
         .view(
@@ -577,7 +563,7 @@ async fn test_ft_buy() -> anyhow::Result<()> {
         .await?;
 
     assert!(res.is_success());
-    println!("buy: {:?}", res);
+    // println!("buy: {:?}", res);
     
     let balance = stable_coin_contract
         .view(
@@ -733,7 +719,7 @@ async fn test_nft_convert() -> anyhow::Result<()> {
         .transact()
         .await?;
     assert!(res.is_success());
-    println!("convert: {:?}", res);
+    // println!("convert: {:?}", res);
 
     Ok(())
 }
@@ -744,8 +730,6 @@ async fn test_ft_convert() -> anyhow::Result<()> {
     let worker = workspaces::sandbox().await?;
     let (escrow_contract, stable_coin_contract, owner, _, _, finder, _, _) = init(&worker).await?;
 
-
-    
     let res = owner
         .call(&worker, escrow_contract.id(), "active_ft_project".into())
         .args_json((NAME, SYMBOL, NFT_BLANK_URI, NFT_MAX_SUPPLY, finder.id(), PRE_MINT_AMOUNT, FUND_THRESHOLD, FIVE_MINUTES, TEN_MINUTES))?
@@ -1040,3 +1024,100 @@ async fn test_convert_after_closing_nft_project() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+
+// #[tokio::test]
+// async fn test_convert_after_closing_ft_project() -> anyhow::Result<()> {
+//     let worker = workspaces::sandbox().await?;
+//     let (escrow_contract, stable_coin_contract, owner, alice, _, finder, _, _) = init(&worker).await?;
+
+//     // active project
+//     let res = owner
+//         .call(&worker, escrow_contract.id(), "active_ft_project".into())
+//         .args_json((NAME, SYMBOL, NFT_BLANK_URI, NFT_MAX_SUPPLY, finder.id(), PRE_MINT_AMOUNT, FUND_THRESHOLD, FIVE_MINUTES, TEN_MINUTES))?
+//         .max_gas()
+//         .transact()
+//         .await?;
+//     assert!(res.is_success());
+//     // println!("active: {:?}", res);
+
+//     //buy proxy token
+//     //calculate stable coin amount for buying proxy token
+//     let amount = U128::from(3u128);
+//     let coin_amount = escrow_contract
+//         .view(
+//             &worker,
+//             "calculate_buy_proxy_token",
+//             json!({
+//             "amount": amount
+//         }).to_string().into_bytes(),
+//         )
+//         .await?
+//         .json::<u128>()?;
+
+//     let _res = owner
+//         .call(&worker, stable_coin_contract.id(), "ft_transfer_call".into())
+//         .args_json((escrow_contract.id(), U128(coin_amount), Option::<String>::None, format!("buy:{}", amount.0)))?
+//         .deposit(1u128)
+//         .max_gas()
+//         .transact()
+//         .await?;
+
+//     worker.fast_forward(300).await?;
+
+//     // register account
+//     let project_token_id = escrow_contract.call(&worker, "get_project_token_id")
+//         .view()
+//         .await?
+//         .json::<AccountId>()?;
+//     owner
+//         .call(&worker, &project_token_id, "storage_deposit")
+//         .args_json((owner.id(), Option::<bool>::None))?
+//         .deposit(125 * STORAGE_BYTE_COST)
+//         .max_gas()
+//         .transact()
+//         .await?;
+
+//     // convert
+//     let res = owner
+//         .call(&worker, escrow_contract.id(), "convert")
+//         .args(json!({"token_ids": vec![2.to_string(), 3.to_string()]}).to_string().as_bytes().to_vec())
+//         .max_gas()
+//         .transact()
+//         .await?;
+//     assert!(res.is_success());
+
+//     worker.fast_forward(800).await?;
+
+//     owner
+//         .call(&worker, &project_token_id, "storage_deposit")
+//         .args_json((escrow_contract.id(), Option::<bool>::None))?
+//         .deposit(125 * STORAGE_BYTE_COST)
+//         .max_gas()
+//         .transact()
+//         .await?;
+
+//     // close project
+//     let res = owner
+//         .call(&worker, escrow_contract.id(), "close_project")
+//         .args_json(json!({}).to_string().as_bytes().to_vec())?
+//         .max_gas()
+//         .transact()
+//         .await?;
+//     assert!(res.is_success());
+
+//     // println!("close project!");
+
+//     let res = alice
+//         .call(&worker, escrow_contract.id(), "convert")
+//         .args(json!({"token_ids": vec![3.to_string(),4.to_string(),5.to_string()]}).to_string().as_bytes().to_vec())
+//         .max_gas()
+//         .transact()
+//         .await?;
+//     assert!(res.is_success());
+
+//     println!("convert: {:?}", res);
+
+//     Ok(())
+// }
+

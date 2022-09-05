@@ -67,8 +67,12 @@ impl Contract {
     pub fn get_curve_args(&self) -> CurveArgs { self.curve_args.clone() }
 
     pub fn get_token_price(&self, token_id: U128) -> u128 {
-        self.get_sum_price(token_id.0.checked_add(1).unwrap())
-            .checked_sub(self.get_sum_price(token_id.0))
+        if token_id.0 < self.pre_mint_amount {
+            return 0u128;
+        }
+        let token_index = token_id.0 - self.pre_mint_amount;
+        self.get_sum_price(token_index + 1)
+            .checked_sub(self.get_sum_price(token_index))
             .unwrap()
     }
 

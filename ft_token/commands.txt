@@ -1,7 +1,11 @@
 1. register account
 
-near call dev-1662102511052-26947222593947 storage_deposit '{"account_id":"dev-1662124956162-72178102604316"}' --deposit 0.01 --accountId theia_owner.testnet
+near call dev-1662102511052-26947222593947 storage_deposit '{"account_id":"dev-1662193217534-19046783282878"}' --deposit 0.01 --accountId theia_owner.testnet
 
 2. token mint
 
 near call dev-1662102511052-26947222593947 ft_mint '{"receiver_id":"hosokawa.testnet", "amount":"1000000000000000000000000000000"}' --accountId hosokawa.testnet
+
+3. Balance
+
+near view dev-1662102511052-26947222593947 ft_balance_of '{"account_id":"dev-1662211928903-24924279464718"}'
