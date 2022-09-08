@@ -2,7 +2,7 @@
 pub const ERR00_INVALID_NAME: &str = "E00: Invalid name";
 pub const ERR01_INVALID_SYMBOL: &str = "E01: Invalid symbol";
 pub const ERR02_INVALID_COLLECTION_BASE_URI: &str = "E02: Invalid collection base uri";
-pub const ERR03_INVALID_BLANK_URI: &str = "E03: Invalid blank uri";
+pub const ERR03_INVALID_PT_MEDIA_URI: &str = "E03: Invalid blank uri";
 pub const ERR04_INVALID_MAX_SUPPLY: &str = "E04: Invalid max supply";
 pub const ERR05_INVALID_FUNDING_TARGET: &str = "E05: Invalid funding target";
 pub const ERR06_INVALID_CONVERSION_PERIOD: &str = "E06: Invalid conversion period (min: 1 day)";

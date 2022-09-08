@@ -81,8 +81,7 @@ pub struct ProxyTokenMintArgs {
 pub trait SelfCallbacks {
     fn on_activate(
         &mut self,
-        project_token_id: AccountId,
-        proxy_token_id: AccountId
+        project_token_id: AccountId
     ) -> PromiseOrValue<bool>;
     fn on_buy(&mut self, from: AccountId, remain: U128) -> bool;
     fn on_sell(&mut self);
@@ -107,15 +106,6 @@ pub trait FungibleToken {
     fn ft_transfer(&mut self, receiver_id: AccountId, amount: U128, memo: Option<String>);
     fn get_owner(&self) -> AccountId;
     fn set_owner(&mut self, owner_id: AccountId);
-}
-
-#[ext_contract(ext_proxy_token)]
-pub trait ProxyToken {
-    fn new(&mut self, name: String, symbol: String, blank_uri: String, max_supply: U128);
-    fn mt_mint(&mut self, receiver_id: AccountId, amount: U128);
-    fn mt_burn(&mut self, from_id: AccountId, token_ids: Vec<TokenId>);
-    fn mt_burn_with_amount(&mut self, from_id: AccountId, start_id: TokenId, amount: U128);
-    fn mt_all_total_supply(&self);
 }
 
 construct_uint! {

@@ -6,21 +6,31 @@ mod owner;
 mod validates;
 mod pause;
 mod token_receiver;
+mod pt_metadata;
+mod proxy_token;
+mod event;
 
 use near_contract_standards::non_fungible_token::TokenId;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::env::STORAGE_PRICE_PER_BYTE;
-use near_sdk::{env, near_bindgen, AccountId, Balance, PanicOnDefault, Promise, Gas, log, require};
+use near_sdk::{env, near_bindgen, AccountId, Balance, BorshStorageKey, PanicOnDefault, Promise, Gas, log, require};
+use near_sdk::collections::{LookupMap, UnorderedMap};
 use near_sdk::json_types::U128;
 use near_sdk::serde_json::json;
+use crate::pt_metadata::*;
 use crate::errors::*;
 use crate::utils::*;
+use crate::event::*;
 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 pub struct Contract {
     /// Owner of contract
     owner_id: AccountId,
+    /// Project token name
+    name: String,
+    /// Project token symbol
+    symbol: String,
     /// Protocol account
     treasury_id: AccountId,
     /// Protocol fee percent
@@ -33,8 +43,6 @@ pub struct Contract {
     project_token_type: ProjectTokenType,
     /// Project token id
     project_token_id: Option<AccountId>,
-    /// Proxy token id
-    proxy_token_id: Option<AccountId>,
     /// Funding target amount
     fund_threshold: Balance,
     /// Start timestamp
@@ -65,19 +73,32 @@ pub struct Contract {
     state: RunningState,
     /// Closed
     is_closed: bool,
+    /// Proxy token media uri
+    pt_media_uri: String,
+    /// Proxy token max supply
+    pt_max_supply: u128,
+    /// Proxy token all total supply
+    pt_all_total_supply: Balance,
+    /// Proxy token total supply by token id
+    pt_total_supply: LookupMap<TokenId, Balance>,
+    /// Proxy token balance by token id and account id
+    pt_balances_per_token: UnorderedMap<TokenId, LookupMap<AccountId, Balance>>,
+}
+
+#[derive(BorshSerialize, BorshStorageKey)]
+enum StorageKey {
+    TotalSupply { supply: u128 },
+    Balances,
+    BalancesInner { token_id: Vec<u8> },
 }
 
 const MIN_STORAGE_NON_FUNGIBLE_TOKEN: Balance = 600_000 * STORAGE_PRICE_PER_BYTE;
 const MIN_STORAGE_FUNGIBLE_TOKEN: Balance = 600_000 * STORAGE_PRICE_PER_BYTE;
-const MIN_STORAGE_PROXY_TOKEN : Balance = 400_000 * STORAGE_PRICE_PER_BYTE;
-const DEPOSIT_ONE_PROXY_TOKEN_MINT: Balance = 640 * STORAGE_PRICE_PER_BYTE;
 const DEPOSIT_ONE_NFT_MINT: Balance = 638 * STORAGE_PRICE_PER_BYTE;
 const NO_DEPOSIT: Balance = 0u128;
 const ONE_YOCTO: Balance = 1u128;
 const TGAS: u64 = 1_000_000_000_000;
-const GAS_PROXY_TOKEN_MINT: Gas = Gas(100 * TGAS);
 
-const PROXY_TOKEN_CODE: &[u8] = include_bytes!("../../target/wasm32-unknown-unknown/release/proxy_token.wasm");
 const NFT_COLLECTION_CODE: &[u8] = include_bytes!("../../target/wasm32-unknown-unknown/release/nft_collection.wasm");
 const FUNGIBLE_TOKEN_CODE: &[u8] = include_bytes!("../../target/wasm32-unknown-unknown/release/ft_token.wasm");
 
@@ -85,18 +106,22 @@ const FUNGIBLE_TOKEN_CODE: &[u8] = include_bytes!("../../target/wasm32-unknown-u
 impl Contract {
     /// Initialize the contract
     #[init]
-    pub fn new(owner_id: AccountId, stable_coin_id: AccountId, stable_coin_decimals: u8, curve_type: CurveType, curve_args: CurveArgs, treasury_id: AccountId) -> Self {
+    pub fn new(owner_id: AccountId, name: String, symbol: String, pt_media_uri: String, stable_coin_id: AccountId, stable_coin_decimals: u8, curve_type: CurveType, curve_args: CurveArgs, treasury_id: AccountId) -> Self {
         assert!(!env::state_exists(), "{}", ERR08_ALREADY_INITIALIZED);
+        assert!(name.len() > 2, "{}", ERR00_INVALID_NAME);
+        assert!(symbol.len() < 13 && symbol.len() > 2, "{}", ERR01_INVALID_SYMBOL);
+        assert!(pt_media_uri.len() > 0, "{}", ERR03_INVALID_PT_MEDIA_URI);
 
         Self {
             owner_id,
+            name,
+            symbol,
             treasury_id,
             treasury_fee: 100,  // 1%
             finder_id: None,
             finder_fee: 100,    // 1%
             project_token_type: ProjectTokenType::NonFungible,
             project_token_id: None,
-            proxy_token_id: None,
             fund_threshold: 0,
             start_timestamp: 0,
             tp_timestamp: 0,
@@ -112,17 +137,19 @@ impl Contract {
             curve_args,
             state: RunningState::Running,
             is_closed: false,
+            pt_media_uri,
+            pt_total_supply: LookupMap::new(StorageKey::TotalSupply { supply: u128::MAX }),
+            pt_balances_per_token: UnorderedMap::new(StorageKey::Balances),
+            pt_max_supply: 0,
+            pt_all_total_supply: 0
         }
     }
 
     /// Active NFT project
-    pub fn active_nft_project(&mut self, name: String, symbol: String, base_uri: String, blank_media_uri: String, max_supply: U128, finder_id: AccountId, pre_mint_amount: U128, fund_threshold: U128, buffer_period: u64, conversion_period: u64) -> Promise {
+    pub fn active_nft_project(&mut self, base_uri: String, max_supply: U128, finder_id: AccountId, pre_mint_amount: U128, fund_threshold: U128, buffer_period: u64, conversion_period: u64) -> Promise {
         self.assert_owner();
         assert_eq!(self.is_closed, false, "{}", ERR013_ALREADY_CLOSED);
-        assert!(name.len() > 2, "{}", ERR00_INVALID_NAME);
-        assert!(symbol.len() < 13 && symbol.len() > 2, "{}", ERR01_INVALID_SYMBOL);
         assert!(base_uri.len() > 0, "{}", ERR02_INVALID_COLLECTION_BASE_URI);
-        assert!(blank_media_uri.len() > 0, "{}", ERR03_INVALID_BLANK_URI);
         assert!(max_supply.0 > 0, "{}", ERR04_INVALID_MAX_SUPPLY);
         assert!(fund_threshold.0 > 0, "{}", ERR05_INVALID_FUNDING_TARGET);
         assert!(conversion_period >= 86400, "{}", ERR06_INVALID_CONVERSION_PERIOD);
@@ -132,13 +159,12 @@ impl Contract {
         self.pre_mint_amount = pre_mint_amount.0;
         self.buffer_period = buffer_period;
         self.conversion_period = conversion_period;
-        self.start_timestamp = env::block_timestamp();
         self.project_token_type = ProjectTokenType::NonFungible;
+        self.pt_max_supply = max_supply.0;
 
-        let mut token_suffix = name.clone().to_lowercase();
+        let mut token_suffix = self.name.clone().to_lowercase();
         token_suffix.retain(|c| !c.is_whitespace());
         let project_token_id = AccountId::new_unchecked(format!("{}.{}", token_suffix, env::current_account_id()));
-        let proxy_token_id = AccountId::new_unchecked(format!("p{}.{}", token_suffix, env::current_account_id()));
 
         // deploy non-fungible token
         let project_token_promise = Promise::new(project_token_id.clone())
@@ -149,8 +175,8 @@ impl Contract {
                 "new".to_string(),
                 json!({
                     "owner_id": env::current_account_id(),
-                    "name": name.clone(),
-                    "symbol": symbol.clone(),
+                    "name": self.name.clone(),
+                    "symbol": self.symbol.clone(),
                     "base_uri": base_uri,
                     "max_supply": max_supply
                 }).to_string().as_bytes().to_vec(),
@@ -159,46 +185,18 @@ impl Contract {
             );
 
         // deploy proxy token
-        let proxy_token_promise = Promise::new(proxy_token_id.clone())
-            .create_account()
-            .transfer(MIN_STORAGE_PROXY_TOKEN)
-            .deploy_contract(PROXY_TOKEN_CODE.to_vec())
-            .function_call(
-                "new".to_string(),
-                json!({
-                        "owner_id": env::current_account_id(),
-                        "name": name,
-                        "symbol": symbol,
-                        "blank_media_uri": blank_media_uri,
-                        "max_supply": max_supply
-                    }).to_string().as_bytes().to_vec(),
-                NO_DEPOSIT,
-                Gas(5 * TGAS)
-            )
-            .function_call(
-                "mt_mint".to_string(),
-                json!({
-                        "receiver_id": self.owner_id.clone(),
-                        "amount": pre_mint_amount
-                    }).to_string().as_bytes().to_vec(),
-                    DEPOSIT_ONE_PROXY_TOKEN_MINT * pre_mint_amount.0,
-                GAS_PROXY_TOKEN_MINT
-            );
+        self.pt_mint(self.owner_id.clone(), pre_mint_amount);
 
         project_token_promise
-            .and(proxy_token_promise)
             .then(
-                ext_self::ext(env::current_account_id()).on_activate(project_token_id, proxy_token_id)
+                ext_self::ext(env::current_account_id()).on_activate(project_token_id)
             )
     }
 
     /// Active FT project
-    pub fn active_ft_project(&mut self, name: String, symbol: String, blank_media_uri: String, max_supply: U128, finder_id: AccountId, pre_mint_amount: U128, fund_threshold: U128, buffer_period: u64, conversion_period: u64) -> Promise {
+    pub fn active_ft_project(&mut self, max_supply: U128, finder_id: AccountId, pre_mint_amount: U128, fund_threshold: U128, buffer_period: u64, conversion_period: u64) -> Promise {
         self.assert_owner();
         assert_eq!(self.is_closed, false, "{}", ERR013_ALREADY_CLOSED);
-        assert!(name.len() > 2, "{}", ERR00_INVALID_NAME);
-        assert!(symbol.len() < 13 && symbol.len() > 2, "{}", ERR01_INVALID_SYMBOL);
-        assert!(blank_media_uri.len() > 0, "{}", ERR03_INVALID_BLANK_URI);
         assert!(max_supply.0 > 0, "{}", ERR04_INVALID_MAX_SUPPLY);
         assert!(fund_threshold.0 > 0, "{}", ERR05_INVALID_FUNDING_TARGET);
         assert!(conversion_period >= 86400, "{}", ERR06_INVALID_CONVERSION_PERIOD);
@@ -208,13 +206,11 @@ impl Contract {
         self.pre_mint_amount = pre_mint_amount.0;
         self.buffer_period = buffer_period;
         self.conversion_period = conversion_period;
-        self.start_timestamp = env::block_timestamp();
         self.project_token_type = ProjectTokenType::Fungible;
 
-        let mut token_suffix = name.clone().to_lowercase();
+        let mut token_suffix = self.name.clone().to_lowercase();
         token_suffix.retain(|c| !c.is_whitespace());
         let project_token_id = AccountId::new_unchecked(format!("{}.{}", token_suffix, env::current_account_id()));
-        let proxy_token_id = AccountId::new_unchecked(format!("p{}.{}", token_suffix, env::current_account_id()));
 
         // deploy fungible token
         let project_token_promise = Promise::new(project_token_id.clone())
@@ -225,8 +221,8 @@ impl Contract {
                 "new".to_string(),
                 json!({
                     "owner_id": env::current_account_id(),
-                    "name": name.clone(),
-                    "symbol": symbol.clone(),
+                    "name": self.name.clone(),
+                    "symbol": self.symbol.clone(),
                     "decimals": 1u8
                 }).to_string().as_bytes().to_vec(),
                 NO_DEPOSIT,
@@ -234,51 +230,26 @@ impl Contract {
             );
 
         // deploy proxy token
-        let proxy_token_promise = Promise::new(proxy_token_id.clone())
-            .create_account()
-            .transfer(MIN_STORAGE_PROXY_TOKEN)
-            .deploy_contract(PROXY_TOKEN_CODE.to_vec())
-            .function_call(
-                "new".to_string(),
-                json!({
-                        "owner_id": env::current_account_id(),
-                        "name": name,
-                        "symbol": symbol,
-                        "blank_media_uri": blank_media_uri,
-                        "max_supply": max_supply
-                    }).to_string().as_bytes().to_vec(),
-                NO_DEPOSIT,
-                Gas(5 * TGAS)
-            )
-            .function_call(
-                "mt_mint".to_string(),
-                json!({
-                        "receiver_id": self.owner_id.clone(),
-                        "amount": pre_mint_amount
-                    }).to_string().as_bytes().to_vec(),
-                    DEPOSIT_ONE_PROXY_TOKEN_MINT * pre_mint_amount.0,
-                GAS_PROXY_TOKEN_MINT
-            );
+        self.pt_mint(self.owner_id.clone(), pre_mint_amount);
 
-        project_token_promise.and(proxy_token_promise).then(
-            ext_self::ext(env::current_account_id()).on_activate(project_token_id, proxy_token_id)
+        project_token_promise.then(
+            ext_self::ext(env::current_account_id()).on_activate(project_token_id)
         )
     }
-
 
     /// Callback after project token was created
     #[private]
     pub fn on_activate(
         &mut self,
-        project_token_id: AccountId,
-        proxy_token_id: AccountId
+        project_token_id: AccountId
     ) {
         require!(env::promise_results_count() == 2, "Contract expected a result on the callback");
 
         if is_promise_ok(env::promise_result(0)) && is_promise_ok(env::promise_result(1)) {
             self.project_token_id = Some(project_token_id.clone());
-            self.proxy_token_id = Some(proxy_token_id.clone());
-            log!("Activated {} {}", proxy_token_id.to_string(), project_token_id.to_string());
+            self.start_timestamp = env::block_timestamp();
+
+            log!("Activated {} {}", project_token_id.to_string(), self.start_timestamp);
         } else {
             env::panic_str(ERR015_ACTIVATE_FAILED);
         }
@@ -319,19 +290,13 @@ impl Contract {
             );
 
         // Mint proxy token to customer
-        let proxy_token_mint_promise = ext_proxy_token::ext(self.proxy_token_id.clone().unwrap())
-            .with_static_gas(GAS_PROXY_TOKEN_MINT)
-            .with_attached_deposit(DEPOSIT_ONE_PROXY_TOKEN_MINT * amount.0)
-            .mt_mint(
-                from.clone(),
-                amount,
-            );
+        self.pt_mint(from.clone(), amount);
 
         // update circulating supply
         self.circulating_supply += amount.0;
         let remain_amount = cal_coin_amount - amount.0;
 
-        treasury_promise.and(proxy_token_mint_promise).then(
+        treasury_promise.then(
                 ext_self::ext(env::current_account_id())
                     .with_static_gas(Gas(5 * TGAS))
                     .on_buy(from, U128(remain_amount))
@@ -372,6 +337,12 @@ impl Contract {
         // update circulating supply
         self.circulating_supply -= token_ids.len() as u128;
 
+        // Burn Proxy Token
+        self.pt_burn(
+            env::predecessor_account_id(),
+            token_ids,
+        );
+
         // Transfer stable coin to customer
         ext_fungible_token::ext(self.stable_coin_id.clone())
             .with_static_gas(GAS_FOR_FT_TRANSFER)
@@ -380,15 +351,6 @@ impl Contract {
                 env::predecessor_account_id(),
                 U128::from(cal_coin_amount),
                 None,
-            )
-            .and(
-                // Burn Proxy Token
-                ext_proxy_token::ext(self.proxy_token_id.clone().unwrap())
-                    .with_static_gas(Gas(5 * TGAS))
-                    .mt_burn(
-                        env::predecessor_account_id(),
-                        token_ids,
-                    )
             )
             .then(
                 ext_self::ext(env::current_account_id())
@@ -423,15 +385,9 @@ impl Contract {
             }
         };
 
+        self.pt_burn(env::predecessor_account_id(), token_ids.clone());
+
         convert_project_token
-            .and(
-                ext_proxy_token::ext(self.proxy_token_id.clone().unwrap())
-                    .with_static_gas(Gas(5 * TGAS))
-                    .mt_burn(
-                        env::predecessor_account_id(),
-                        token_ids.clone(),
-                    )
-            )
             .then(
                 ext_self::ext(env::current_account_id())
                     .with_static_gas(Gas(5 * TGAS))
@@ -535,15 +491,9 @@ impl Contract {
             }
 
             let token_ids = (0..self.pre_mint_amount - 1).enumerate().map(|(_, token_id)| { token_id.to_string() }).collect();
-            let burn_batch_promise = ext_proxy_token::ext(self.proxy_token_id.clone().unwrap())
-                .with_static_gas(Gas(5 * TGAS))
-                .mt_burn(
-                    self.owner_id.clone(),
-                    token_ids,
-                );
-        
+            self.pt_burn(self.owner_id.clone(), token_ids);
+
             mint_promise
-                .and(burn_batch_promise)
                 .and(transfer_owner_promise)
                 .then(  
                     ext_self::ext(env::current_account_id())
