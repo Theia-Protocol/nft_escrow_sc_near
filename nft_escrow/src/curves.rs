@@ -19,20 +19,21 @@ impl Contract {
                     .unwrap();
             },
             CurveType::Linear=> {
-                // p = A * x^2 / 2 + B * x
+                // p = (A * x^2 + 2 * B * x) / 2
                 price = (&self).curve_args.arg_a
                     .unwrap()
                     .checked_mul(to_token_id * to_token_id)
-                    .unwrap()
-                    .checked_div(2)
                     .unwrap();
                 price = price
                     .checked_add((&self).curve_args.arg_b
                         .unwrap()
-                        .checked_mul(to_token_id).unwrap())
+                        .checked_mul(to_token_id).unwrap()
+                        .checked_mul(2).unwrap())
                         .unwrap();
                 price = price
                     .checked_mul(one_coin)
+                    .unwrap()
+                    .checked_div(2)
                     .unwrap();
             },
             CurveType::Sigmoidal => {
