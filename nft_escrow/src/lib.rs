@@ -13,7 +13,7 @@ mod event;
 use near_contract_standards::non_fungible_token::TokenId;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::env::STORAGE_PRICE_PER_BYTE;
-use near_sdk::{env, near_bindgen, AccountId, Balance, BorshStorageKey, PanicOnDefault, Promise, Gas, log, require};
+use near_sdk::{env, near_bindgen, AccountId, Balance, BorshStorageKey, PanicOnDefault, Promise, Gas, log, require, is_promise_success};
 use near_sdk::collections::{LookupMap, UnorderedMap};
 use near_sdk::json_types::U128;
 use near_sdk::serde_json::json;
@@ -95,9 +95,11 @@ enum StorageKey {
 const MIN_STORAGE_NON_FUNGIBLE_TOKEN: Balance = 600_000 * STORAGE_PRICE_PER_BYTE;
 const MIN_STORAGE_FUNGIBLE_TOKEN: Balance = 600_000 * STORAGE_PRICE_PER_BYTE;
 const DEPOSIT_ONE_NFT_MINT: Balance = 638 * STORAGE_PRICE_PER_BYTE;
+const DEPOSIT_ONE_PT_MINT: Balance = 415 * STORAGE_PRICE_PER_BYTE;
 const NO_DEPOSIT: Balance = 0u128;
 const ONE_YOCTO: Balance = 1u128;
 const TGAS: u64 = 1_000_000_000_000;
+const GAS_FOR_PT_MINT: Gas = Gas(10 * TGAS);
 
 const NFT_COLLECTION_CODE: &[u8] = include_bytes!("../../target/wasm32-unknown-unknown/release/nft_collection.wasm");
 const FUNGIBLE_TOKEN_CODE: &[u8] = include_bytes!("../../target/wasm32-unknown-unknown/release/ft_token.wasm");
@@ -150,7 +152,7 @@ impl Contract {
         self.assert_owner();
         assert_eq!(self.is_closed, false, "{}", ERR013_ALREADY_CLOSED);
         assert!(base_uri.len() > 0, "{}", ERR02_INVALID_COLLECTION_BASE_URI);
-        assert!(max_supply.0 > 0, "{}", ERR04_INVALID_MAX_SUPPLY);
+        assert!(max_supply.0 > 0 && pre_mint_amount.0 < max_supply.0, "{}", ERR04_INVALID_MAX_SUPPLY);
         assert!(fund_threshold.0 > 0, "{}", ERR05_INVALID_FUNDING_TARGET);
         assert!(conversion_period >= 86400, "{}", ERR06_INVALID_CONVERSION_PERIOD);
 
@@ -184,12 +186,12 @@ impl Contract {
                 Gas(5 * TGAS)
             );
 
-        // deploy proxy token
-        self.pt_mint(self.owner_id.clone(), pre_mint_amount);
-
         project_token_promise
             .then(
-                ext_self::ext(env::current_account_id()).on_activate(project_token_id)
+                ext_self::ext(env::current_account_id())
+                    .with_static_gas(Gas(5 * TGAS))
+                    .with_attached_deposit(pre_mint_amount.0 * DEPOSIT_ONE_PT_MINT)
+                    .on_activate(project_token_id)
             )
     }
 
@@ -207,6 +209,7 @@ impl Contract {
         self.buffer_period = buffer_period;
         self.conversion_period = conversion_period;
         self.project_token_type = ProjectTokenType::Fungible;
+        self.pt_max_supply = max_supply.0;
 
         let mut token_suffix = self.name.clone().to_lowercase();
         token_suffix.retain(|c| !c.is_whitespace());
@@ -229,23 +232,27 @@ impl Contract {
                 Gas(5 * TGAS)
             );
 
-        // deploy proxy token
-        self.pt_mint(self.owner_id.clone(), pre_mint_amount);
-
         project_token_promise.then(
-            ext_self::ext(env::current_account_id()).on_activate(project_token_id)
+            ext_self::ext(env::current_account_id())
+                .with_static_gas(GAS_FOR_PT_MINT)
+                .with_attached_deposit(pre_mint_amount.0 * DEPOSIT_ONE_PT_MINT)
+                .on_activate(project_token_id)
         )
     }
 
     /// Callback after project token was created
     #[private]
+    #[payable]
     pub fn on_activate(
         &mut self,
         project_token_id: AccountId
     ) {
-        require!(env::promise_results_count() == 2, "Contract expected a result on the callback");
+        if is_promise_success() {
+            // pre-mint
+            if self.pre_mint_amount.clone() > 0 {
+                self.pt_mint(self.owner_id.clone(), U128(self.pre_mint_amount));
+            }
 
-        if is_promise_ok(env::promise_result(0)) && is_promise_ok(env::promise_result(1)) {
             self.project_token_id = Some(project_token_id.clone());
             self.start_timestamp = env::block_timestamp();
 
@@ -256,12 +263,14 @@ impl Contract {
     }
 
     /// buy proxy token
-    pub(crate) fn buy(&mut self, from: AccountId, amount: U128, coin_amount: U128) -> Promise {
+    pub(crate) fn buy(&mut self, from: AccountId, amount: U128, deposit: U128) -> Promise {
         self.assert_not_paused();
         self.assert_is_ongoing();
+        assert!(amount.0 > 0, "Invalid amount");
+        assert!(self.pt_all_total_supply + amount.0 < self.pt_max_supply, "OverMaxSupply");
 
         let cal_coin_amount = self.calculate_buy_proxy_token(amount);
-        assert!(coin_amount.0 >= cal_coin_amount, "{}", ERR07_INSUFFICIENT_FUND);
+        assert!(deposit.0 >= cal_coin_amount, "{}", ERR07_INSUFFICIENT_FUND);
 
         let treasury_fee_amount = cal_coin_amount
             .checked_mul(self.treasury_fee as u128)
@@ -289,35 +298,36 @@ impl Contract {
                 None,
             );
 
-        // Mint proxy token to customer
-        self.pt_mint(from.clone(), amount);
-
         // update circulating supply
         self.circulating_supply += amount.0;
-        let remain_amount = cal_coin_amount - amount.0;
 
         treasury_promise.then(
                 ext_self::ext(env::current_account_id())
-                    .with_static_gas(Gas(5 * TGAS))
-                    .on_buy(from, U128(remain_amount))
+                    .with_static_gas(GAS_FOR_PT_MINT)
+                    .with_attached_deposit(amount.0 * DEPOSIT_ONE_PT_MINT)
+                    .on_buy(from, amount, deposit, U128(cal_coin_amount))
             )
     }
 
     #[private]
-    pub fn on_buy(&mut self, from: AccountId, remain: U128) -> bool {
-        require!(env::promise_results_count() == 2, "Contract expected a result on the callback");
-
-        if is_promise_ok(env::promise_result(0)) && is_promise_ok(env::promise_result(1)) {
-            if remain.0 > 0 {
+    #[payable]
+    pub fn on_buy(&mut self, from: AccountId, amount: U128, deposit: U128, reserve: U128) -> bool {
+        if is_promise_success() {
+            let remain = deposit.0 - reserve.0;
+            if remain > 0 {
                 ext_fungible_token::ext(self.stable_coin_id.clone())
                     .with_static_gas(GAS_FOR_FT_TRANSFER)
                     .with_attached_deposit(ONE_YOCTO)
                     .ft_transfer(
-                        from,
-                        remain,
+                        from.clone(),
+                        U128(remain),
                         None,
                     );
             }
+            // Mint proxy token to customer
+            self.pt_mint(from, amount);
+
+            log!("Buy {} {}", amount.0, reserve.0);
         } else {
             env::panic_str(ERR016_ACTION_FAILED);
         }
@@ -340,7 +350,7 @@ impl Contract {
         // Burn Proxy Token
         self.pt_burn(
             env::predecessor_account_id(),
-            token_ids,
+            token_ids.clone(),
         );
 
         // Transfer stable coin to customer
@@ -349,25 +359,25 @@ impl Contract {
             .with_attached_deposit(ONE_YOCTO)
             .ft_transfer(
                 env::predecessor_account_id(),
-                U128::from(cal_coin_amount),
+                U128(cal_coin_amount),
                 None,
             )
             .then(
                 ext_self::ext(env::current_account_id())
                 .with_static_gas(Gas(5 * TGAS))
-                .on_sell()
+                .on_sell(U128(cal_coin_amount), token_ids)
             )
     }
 
     #[private]
-    pub fn on_sell(&mut self) -> bool {
-        require!(env::promise_results_count() == 2, "Contract expected a result on the callback");
-
-        if is_promise_ok(env::promise_result(0)) && is_promise_ok(env::promise_result(1)) {
-            true
+    pub fn on_sell(&mut self, refund: U128, token_ids: Vec<TokenId>) -> bool {
+        if is_promise_success() {
+            log!("Sell [{}] {}", token_ids.join(","), refund.0);
         } else {
             env::panic_str(ERR016_ACTION_FAILED);
         }
+
+        true
     }
 
     /// convert proxy token to real token
@@ -582,7 +592,6 @@ impl Contract {
                 ),
         }
     }
-
 }
 
 

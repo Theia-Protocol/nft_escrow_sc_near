@@ -1,26 +1,19 @@
-use near_contract_standards::non_fungible_token::{refund_deposit_to_account};
 use crate::*;
 
 #[near_bindgen]
 impl Contract {
     /// Mint nft tokens with amount belonging to `receiver_id`.
     /// caller should be owner
-    #[payable]
-    pub fn pt_mint(
+    pub(crate) fn pt_mint(
         &mut self,
         receiver_id: AccountId,
         amount: U128,
-    ) -> Vec<TokenId> {
-        self.assert_owner();
-        assert!(amount.0 > 0, "Invalid amount");
-        assert!(self.pt_all_total_supply + amount.0 < self.pt_max_supply, "OverMaxSupply");
-
-        let mut token_ids: Vec<TokenId> = vec![];
+    ) {
+        let mut token_ids: Vec<String> = vec![];
         let mut i = 0;
 
         // Remember current storage usage if refund_id is Some
-        let refund_id = Some(env::predecessor_account_id());
-        let initial_storage_usage = refund_id.as_ref().map(|account_id| (account_id, env::storage_usage()));
+        let initial_storage_usage = env::storage_usage();
 
         while i < amount.0 {
             let token_id: TokenId = self.pt_all_total_supply.checked_add(i).unwrap().to_string();
@@ -47,36 +40,30 @@ impl Contract {
                 balances.insert(&receiver_id, &new);
             }
 
-            token_ids.push(token_id.clone());
+            token_ids.push(token_id);
             i += 1;
-
-            MtMint {
-                owner_id: &receiver_id,
-                token_ids: &[&token_id],
-                amounts: &["1"],
-                memo: None,
-            }
-                .emit();
         }
 
-        if let Some((id, usage)) = initial_storage_usage {
-            refund_deposit_to_account(env::storage_usage() - usage, id.clone());
-        }
+        refund_deposit_to_account(env::storage_usage() - initial_storage_usage, env::predecessor_account_id());
 
         self.pt_all_total_supply = self.pt_all_total_supply.checked_add(amount.0).unwrap();
 
-        token_ids
+        PTMint {
+            owner_id: &receiver_id,
+            token_ids: &token_ids,
+            memo: None,
+        }
+            .emit();
     }
 
     /// Burn nft tokens from `from_id`.
     /// caller should be owner
-    pub fn pt_burn(
+    pub(crate) fn pt_burn(
         &mut self,
         from_id: AccountId,
         token_ids: Vec<TokenId>,
-    ) -> bool {
+    ) {
         assert!(token_ids.len() > 0, "Invalid param");
-        assert_eq!(env::predecessor_account_id(), self.owner_id, "Unauthorized");
 
         token_ids.iter().enumerate().for_each(|(_, token_id)| {
             let balance = self.internal_unwrap_balance_of(token_id, &from_id);
@@ -95,20 +82,16 @@ impl Contract {
             } else {
                 env::panic_str("The account doesn't have enough balance");
             }
-
-            MtBurn {
-                owner_id: &from_id,
-                authorized_id: Some(&self.owner_id),
-                token_ids: &[&token_id],
-                amounts: &["1"],
-                memo: None,
-            }
-                .emit();
         });
 
         self.pt_all_total_supply = self.pt_all_total_supply.checked_sub(token_ids.len().try_into().unwrap()).unwrap();
 
-        true
+        PTBurn {
+            owner_id: &from_id,
+            token_ids: &token_ids,
+            memo: None,
+        }
+            .emit();
     }
 
     pub fn pt_token(&self, token_id: TokenId) -> Option<Token> {
@@ -154,14 +137,14 @@ impl Contract {
         }
     }
 
-    pub fn pt_balance_of(&self, owner: AccountId, id: Vec<TokenId>) -> Vec<u128> {
+    pub fn pt_balance_of(&self, owner: AccountId, ids: Vec<TokenId>) -> Vec<u128> {
         self.pt_balances_per_token
             .iter()
-            .filter(|(token_id, _)| id.contains(token_id))
+            .filter(|(token_id, _)| ids.contains(token_id))
             .map(|(_, balances)| {
                 balances
                     .get(&owner)
-                    .expect("User does not have account in of the tokens")
+                    .unwrap_or_default()
             })
             .collect()
     }
