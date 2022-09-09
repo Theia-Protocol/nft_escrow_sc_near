@@ -1,5 +1,5 @@
 use near_contract_standards::non_fungible_token::TokenId;
-use near_sdk::{ext_contract, AccountId, Gas, Balance, PromiseOrValue, PromiseResult, env};
+use near_sdk::{ext_contract, AccountId, Gas, Balance, PromiseOrValue, PromiseResult, env, require, Promise};
 use near_sdk::json_types::{U128};
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::serde::{Deserialize, Serialize};
@@ -83,8 +83,8 @@ pub trait SelfCallbacks {
         &mut self,
         project_token_id: AccountId
     ) -> PromiseOrValue<bool>;
-    fn on_buy(&mut self, from: AccountId, remain: U128) -> bool;
-    fn on_sell(&mut self);
+    fn on_buy(&mut self, from: AccountId, amount: U128, deposit: U128, reserve: U128) -> bool;
+    fn on_sell(&mut self, refund: U128, token_ids: Vec<TokenId>) -> bool;
     fn on_convert(&mut self, amount: Balance);
     fn on_claim_fund(&mut self, amount: U128);
     fn on_close_project(&mut self);
@@ -129,6 +129,21 @@ pub fn is_promise_ok(result: PromiseResult) -> bool {
         PromiseResult::NotReady => unreachable!(),
         PromiseResult::Successful(_) => true,
         PromiseResult::Failed => env::panic_str("ERR_CALL_FAILED"),
+    }
+}
+
+pub fn refund_deposit_to_account(storage_used: u64, account_id: AccountId) {
+    let required_cost = env::storage_byte_cost() * Balance::from(storage_used);
+    let attached_deposit = env::attached_deposit();
+
+    require!(
+        required_cost <= attached_deposit,
+        format!("Must attach {} yoctoNEAR to cover storage, attached {}", required_cost, attached_deposit)
+    );
+
+    let refund = attached_deposit - required_cost;
+    if refund > 1 {
+        Promise::new(account_id).transfer(refund);
     }
 }
 
