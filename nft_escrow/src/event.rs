@@ -32,8 +32,8 @@ impl<'a> NearEvent<'a> {
 #[serde(rename_all = "snake_case")]
 #[allow(clippy::enum_variant_names)]
 enum Nep245EventKind<'a> {
-    MtMint(&'a [MtMint<'a>]),
-    MtBurn(&'a [MtBurn<'a>]),
+    PTMint(&'a [PTMint<'a>]),
+    PTBurn(&'a [PTBurn<'a>]),
 }
 
 fn new_245<'a>(version: &'static str, event_kind: Nep245EventKind<'a>) -> NearEvent<'a> {
@@ -46,43 +46,39 @@ fn new_245_v1(event_kind: Nep245EventKind) -> NearEvent {
 
 #[must_use]
 #[derive(Serialize, Debug, Clone)]
-pub struct MtMint<'a> {
+pub struct PTMint<'a> {
     pub owner_id: &'a AccountId,
-    pub token_ids: &'a [&'a str],
-    pub amounts: &'a [&'a str],
+    pub token_ids: &'a [String],
     #[serde(skip_serializing_if = "Option::is_none")]
     pub memo: Option<&'a str>
 }
 
-impl MtMint<'_> {
+impl PTMint<'_> {
     pub fn emit(self) {
         Self::emit_many(&[self])
     }
 
-    pub fn emit_many(data: &[MtMint<'_>]) {
-        new_245_v1(Nep245EventKind::MtMint(data)).emit()
+    pub fn emit_many(data: &[PTMint<'_>]) {
+        new_245_v1(Nep245EventKind::PTMint(data)).emit()
     }
 }
 
 #[must_use]
 #[derive(Serialize, Debug, Clone)]
-pub struct MtBurn<'a> {
+pub struct PTBurn<'a> {
     pub owner_id: &'a AccountId,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub authorized_id: Option<&'a AccountId>,
-    pub token_ids: &'a [&'a str],
-    pub amounts: &'a [&'a str],
+    pub token_ids: &'a [String],
     #[serde(skip_serializing_if = "Option::is_none")]
     pub memo: Option<&'a str>
 }
 
-impl MtBurn<'_> {
+impl PTBurn<'_> {
     pub fn emit(self) {
         Self::emit_many(&[self])
     }
 
-    pub fn emit_many(data: &[MtBurn<'_>]) {
-        new_245_v1(Nep245EventKind::MtBurn(data)).emit()
+    pub fn emit_many(data: &[PTBurn<'_>]) {
+        new_245_v1(Nep245EventKind::PTBurn(data)).emit()
     }
 }
 

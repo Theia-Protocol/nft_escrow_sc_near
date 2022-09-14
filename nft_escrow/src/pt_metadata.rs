@@ -1,14 +1,17 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-use near_sdk::require;
+use near_sdk::{AccountId, require};
 use near_sdk::serde::{Deserialize, Serialize};
 
 /// Version of standard
-pub const MT_METADATA_SPEC: &str = "mt-0.0.1";
+pub const PT_METADATA_SPEC: &str = "mt-0.0.1";
+
+/// Type alias for convenience
+pub type TokenId = String;
 
 /// Metadata that will be permanently set at the contract init
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(crate = "near_sdk::serde")]
-pub struct MtContractMetadata {
+pub struct PTContractMetadata {
     pub spec: String,
     pub name: String,
     pub symbol: String,
@@ -21,7 +24,7 @@ pub struct MtContractMetadata {
 /// Metadata for each token
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(crate = "near_sdk::serde")]
-pub struct TokenMetadata {
+pub struct ProxyTokenMetadata {
     pub title: Option<String>,
     /// Free-form description
     pub description: Option<String>,
@@ -45,10 +48,19 @@ pub struct TokenMetadata {
     pub reference_hash: Option<String>,
 }
 
+/// Info on individual token
+#[derive(Debug, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+pub struct Token {
+    pub token_id: TokenId,
+    pub owner_id: Option<AccountId>,
+    /// Total amount generated
+    pub supply: u128,
+    pub metadata: ProxyTokenMetadata,
+}
 
-impl MtContractMetadata {
+impl PTContractMetadata {
     pub fn assert_valid(&self) {
-        require!(self.spec == MT_METADATA_SPEC, "Spec is not NFT metadata");
+        require!(self.spec == PT_METADATA_SPEC, "Spec is not ProxyToken metadata");
         require!(
             self.reference.is_some() == self.reference_hash.is_some(),
             "Reference and reference hash must be present"
@@ -59,7 +71,7 @@ impl MtContractMetadata {
     }
 }
 
-impl TokenMetadata {
+impl ProxyTokenMetadata {
     pub fn assert_valid(&self) {
         require!(self.media.is_some() == self.media_hash.is_some());
         if let Some(media_hash) = &self.media_hash {
