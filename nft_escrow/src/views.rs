@@ -32,7 +32,7 @@ impl Contract {
 
     pub fn get_running_state(&self) -> RunningState { self.state.clone() }
 
-    pub fn get_is_closed(&self) -> bool { self.is_closed }
+    pub fn get_is_closed(&self) -> ClosedStep { self.closed_step.clone() }
 
     pub fn get_converted_amount(&self) -> Balance { self.converted_amount }
 

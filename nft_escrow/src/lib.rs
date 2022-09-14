@@ -12,7 +12,7 @@ mod proxy_token;
 use near_contract_standards::non_fungible_token::TokenId;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::env::STORAGE_PRICE_PER_BYTE;
-use near_sdk::{env, near_bindgen, AccountId, Balance, BorshStorageKey, PanicOnDefault, Promise, Gas, log, require, is_promise_success};
+use near_sdk::{env, near_bindgen, AccountId, Balance, BorshStorageKey, PanicOnDefault, Promise, Gas, log, is_promise_success, PromiseOrValue};
 use near_sdk::collections::{LookupMap, UnorderedMap};
 use near_sdk::json_types::U128;
 use near_sdk::serde_json::json;
@@ -57,6 +57,10 @@ pub struct Contract {
     stable_coin_decimals: u8,
     /// Total fund amount
     total_fund_amount: Balance,
+    /// Total claimed fund amount
+    claimed_fund_amount: Balance,
+    /// Total claimed finder fee amount
+    claimed_finder_fee: Balance,
     /// Pre-mint amount
     pre_mint_amount: Balance,
     /// Amount of converted proxy token
@@ -70,7 +74,7 @@ pub struct Contract {
     /// Running state
     state: RunningState,
     /// Closed
-    is_closed: bool,
+    closed_step: ClosedStep,
     /// Proxy token media uri
     pt_media_uri: String,
     /// Proxy token max supply
@@ -130,13 +134,15 @@ impl Contract {
             stable_coin_id,
             stable_coin_decimals,
             total_fund_amount: 0,
+            claimed_fund_amount: 0,
+            claimed_finder_fee: 0,
             pre_mint_amount: 0,
             converted_amount: 0,
             circulating_supply: 0,
             curve_type,
             curve_args,
             state: RunningState::Running,
-            is_closed: false,
+            closed_step: ClosedStep::None,
             pt_media_uri,
             pt_total_supply: LookupMap::new(StorageKey::TotalSupply { supply: u128::MAX }),
             pt_balances_per_token: UnorderedMap::new(StorageKey::Balances),
@@ -162,7 +168,7 @@ impl Contract {
     /// Active NFT project
     pub fn active_nft_project(&mut self, base_uri: String, max_supply: U128, finder_id: AccountId, fund_threshold: U128, buffer_period: u64, conversion_period: u64) -> Promise {
         self.assert_owner();
-        assert_eq!(self.is_closed, false, "{}", ERR013_ALREADY_CLOSED);
+        assert!(self.closed_step == ClosedStep::None, "{}", ERR012_ALREADY_CLOSED);
         assert!(base_uri.len() > 0, "{}", ERR02_INVALID_COLLECTION_BASE_URI);
         assert!(max_supply.0 > 0 && self.pre_mint_amount < max_supply.0, "{}", ERR04_INVALID_MAX_SUPPLY);
         assert!(fund_threshold.0 > 0, "{}", ERR05_INVALID_FUNDING_TARGET);
@@ -208,7 +214,7 @@ impl Contract {
     /// Active FT project
     pub fn active_ft_project(&mut self, max_supply: U128, finder_id: AccountId, fund_threshold: U128, buffer_period: u64, conversion_period: u64) -> Promise {
         self.assert_owner();
-        assert_eq!(self.is_closed, false, "{}", ERR013_ALREADY_CLOSED);
+        assert!(self.closed_step == ClosedStep::None, "{}", ERR012_ALREADY_CLOSED);
         assert!(max_supply.0 > 0 && self.pre_mint_amount < max_supply.0, "{}", ERR04_INVALID_MAX_SUPPLY);
         assert!(fund_threshold.0 > 0, "{}", ERR05_INVALID_FUNDING_TARGET);
         assert!(conversion_period >= 86400, "{}", ERR06_INVALID_CONVERSION_PERIOD);
@@ -260,7 +266,7 @@ impl Contract {
 
             log!("Activated {} {}", project_token_id.to_string(), self.start_timestamp);
         } else {
-            env::panic_str(ERR015_ACTIVATE_FAILED);
+            return false;
         }
 
         true
@@ -399,14 +405,11 @@ impl Contract {
         self.assert_not_paused();
         self.assert_is_after_buffer_period();
 
-        let convert_project_token = match self.is_closed {
-            false => {
-                self.internal_project_token_mint(env::predecessor_account_id(), U128::from(token_ids.len() as u128))
-            }
-            true => {
-                // owner
-                self.internal_convert_transfer(env::predecessor_account_id(), token_ids.len() as u128)
-            }
+        let convert_project_token;
+        if self.closed_step >= ClosedStep::RemainProxy {
+           convert_project_token = self.internal_project_token_mint(env::predecessor_account_id(), U128::from(token_ids.len() as u128))
+        } else {
+            convert_project_token = self.internal_convert_transfer(env::predecessor_account_id(), token_ids.len() as u128)
         };
 
         self.pt_burn(env::predecessor_account_id(), token_ids.clone());
@@ -421,16 +424,9 @@ impl Contract {
 
     #[private]
     pub fn on_convert(&mut self, from: AccountId, token_ids: Vec<TokenId>) -> bool {
-        let result_count = env::promise_results_count();
-        require!(result_count > 0, "Contract expected a result on the callback");
-
-        let mut result_index = 0;
-        while result_index < result_count {
-            if !is_promise_ok(env::promise_result(result_index)) {
-                self.revert_pt_burn(from.clone(), token_ids.clone());
-                return false;
-            }
-            result_index += 1;
+        if !is_promise_success() {
+            self.revert_pt_burn(from.clone(), token_ids.clone());
+            return false;
         }
         
         self.converted_amount = self.converted_amount.checked_add(token_ids.len() as u128).unwrap();
@@ -444,30 +440,18 @@ impl Contract {
         self.assert_owner();
         self.assert_is_after_conversion_period();
 
-        assert!(amount.0 > 0 && self.total_fund_amount >= amount.0, "{}", ERR010_INVALID_AMOUNT);
+        let total_finder_fee = self.total_fund_amount.checked_mul(self.finder_fee as u128).unwrap().checked_div(FEE_DIVISOR as u128).unwrap();
+        let total_claimable_fund = self.total_fund_amount.checked_sub(total_finder_fee).unwrap();
+        assert!(amount.0 > 0 && (total_claimable_fund - self.claimed_fund_amount) >= amount.0, "{}", ERR010_INVALID_AMOUNT);
 
-        let finder_fee_amount = amount.0.checked_mul(self.finder_fee as u128).unwrap().checked_div(FEE_DIVISOR as u128).unwrap();
-
-        let fund_transfer = ext_fungible_token::ext(self.stable_coin_id.clone())
+        ext_fungible_token::ext(self.stable_coin_id.clone())
             .with_static_gas(Gas(5 * TGAS))
             .with_attached_deposit(ONE_YOCTO)
             .ft_transfer(
                 to,
-                U128::from(amount.0 - finder_fee_amount),
+                U128::from(amount.0),
                 None,
-            );
-
-        let finder_fee_transfer = ext_fungible_token::ext(self.stable_coin_id.clone())
-            .with_static_gas(Gas(5 * TGAS))
-            .with_attached_deposit(ONE_YOCTO)
-            .ft_transfer(
-                self.finder_id.clone().unwrap(),
-                U128::from(finder_fee_amount),
-                None,
-            );
-
-        fund_transfer
-            .and(finder_fee_transfer)
+            )
             .then(
                 ext_self::ext(env::current_account_id())
                         .with_static_gas(Gas(5 * TGAS))
@@ -476,18 +460,50 @@ impl Contract {
     }
 
     #[private]
-    pub fn on_claim_fund(&mut self, amount: U128) {
-        require!(env::promise_results_count() == 2, "Contract expected a result on the callback");
-
-        if is_promise_ok(env::promise_result(0)) && is_promise_ok(env::promise_result(1)) {
-            self.total_fund_amount -= amount.0;
-        } else {
-            env::panic_str(ERR017_CLAIM_FUND_FAILED);
+    pub fn on_claim_fund(&mut self, amount: U128) -> bool {
+        if is_promise_success() {
+            self.claimed_fund_amount = self.claimed_fund_amount + amount.0;
+            return true;
         }
+
+        false
     }
 
-    /// close project
-    pub fn close_project(&mut self) -> Promise {
+    /// claim finder fee
+    pub fn claim_finder_fee(&mut self, amount: U128) -> Promise {
+        self.assert_owner();
+        self.assert_is_after_conversion_period();
+
+        let total_finder_fee = self.total_fund_amount.checked_mul(self.finder_fee as u128).unwrap().checked_div(FEE_DIVISOR as u128).unwrap();
+        assert!(amount.0 > 0 && (total_finder_fee - self.claimed_finder_fee) >= amount.0, "{}", ERR010_INVALID_AMOUNT);
+
+       ext_fungible_token::ext(self.stable_coin_id.clone())
+            .with_static_gas(Gas(5 * TGAS))
+            .with_attached_deposit(ONE_YOCTO)
+            .ft_transfer(
+                self.finder_id.clone().unwrap(),
+                U128::from(amount.0),
+                None,
+            )
+           .then(
+                ext_self::ext(env::current_account_id())
+                    .with_static_gas(Gas(5 * TGAS))
+                    .on_claim_finder_fee(amount)
+            )
+    }
+
+    #[private]
+    pub fn on_claim_finder_fee(&mut self, amount: U128) -> bool {
+        if is_promise_success() {
+            self.claimed_finder_fee = self.claimed_finder_fee + amount.0;
+            return true;
+        }
+
+        false
+    }
+
+    /// close project 1-step pre-mint
+    pub fn close_project(&mut self) -> PromiseOrValue<bool> {
         self.assert_owner();
         assert!(
             self.start_timestamp == 0 ||
@@ -497,60 +513,63 @@ impl Contract {
             ERR011_NOT_AVAILABLE_TO_CLOSE
         );
 
-        assert_eq!(self.is_closed, false, "{}", ERR013_ALREADY_CLOSED);
+        let close_promise: Option<Promise> = match self.closed_step {
+            ClosedStep::None => {
+                if self.pre_mint_amount > 0 {
+                    let token_ids = (0..self.pre_mint_amount - 1).enumerate().map(|(_, token_id)| { token_id.to_string() }).collect();
+                    self.pt_burn(self.owner_id.clone(), token_ids);
 
-        let transfer_owner_promise = match self.project_token_type {
-            ProjectTokenType::Fungible => ext_fungible_token::ext(self.project_token_id.clone().unwrap())
-                .with_static_gas(Gas(5 * TGAS))
-                .set_owner(self.owner_id.clone()),
-            ProjectTokenType::NonFungible => ext_nft_collection::ext(self.project_token_id.clone().unwrap())
-                .with_static_gas(Gas(5 * TGAS))
-                .set_owner(self.owner_id.clone())
+                    Some(self.internal_project_token_mint(self.owner_id.clone(), U128::from(self.pre_mint_amount)))
+                } else {
+                    None
+                }
+            }
+            ClosedStep::PreMint => {
+                let remain_proxys = self.circulating_supply.checked_sub(self.converted_amount).unwrap();
+                if remain_proxys > 0 {
+                    Some(self.internal_project_token_mint(env::current_account_id(), U128::from(remain_proxys)))
+                } else {
+                    None
+                }
+            }
+            ClosedStep::RemainProxy => {
+                Some(match self.project_token_type {
+                        ProjectTokenType::Fungible =>
+                            ext_fungible_token::ext(self.project_token_id.clone().unwrap())
+                                .with_static_gas(Gas(5 * TGAS))
+                                .set_owner(self.owner_id.clone()),
+                        ProjectTokenType::NonFungible => ext_nft_collection::ext(self.project_token_id.clone().unwrap())
+                            .with_static_gas(Gas(5 * TGAS))
+                            .set_owner(self.owner_id.clone())
+                })
+            }
+            ClosedStep::TransferOwnership => {
+                env::panic_str(ERR012_ALREADY_CLOSED);
+            }
         };
 
-        if self.pre_mint_amount > 0 {
-            let mut mint_promise = self.internal_project_token_mint(self.owner_id.clone(), U128::from(self.pre_mint_amount));
-
-            let remain_proxys = self.circulating_supply.checked_sub(self.converted_amount).unwrap();
-            if remain_proxys > 0 {
-                mint_promise = mint_promise.and(
-                    self.internal_project_token_mint(env::current_account_id(), U128::from(remain_proxys))
-                )
-            }
-
-            let token_ids = (0..self.pre_mint_amount - 1).enumerate().map(|(_, token_id)| { token_id.to_string() }).collect();
-            self.pt_burn(self.owner_id.clone(), token_ids);
-
-            mint_promise
-                .and(transfer_owner_promise)
-                .then(  
-                    ext_self::ext(env::current_account_id())
-                        .with_static_gas(Gas(5 * TGAS))
-                        .on_close_project()
-                )
+        return if close_promise.is_none() {
+            self.closed_step = self.closed_step.increase();
+            PromiseOrValue::Value(true)
         } else {
-            transfer_owner_promise
-                .then(  
-                    ext_self::ext(env::current_account_id())
-                        .with_static_gas(Gas(5 * TGAS))
-                        .on_close_project()
-                )
+            PromiseOrValue::Promise(
+                close_promise.unwrap()
+                    .then(
+                        ext_self::ext(env::current_account_id())
+                            .with_static_gas(Gas(5 * TGAS))
+                            .on_close_project()
+                    )
+            )
         }
     }
 
-    pub fn on_close_project(&mut self) {
-        let result_count = env::promise_results_count();
-        require!(result_count > 0, "Contract expected a result on the callback");
-
-        let mut result_index = 0;
-        while result_index < result_count {
-            if !is_promise_ok(env::promise_result(result_index)) {
-                env::panic_str(ERR012_CLOSE_PROJECT_FAILED);
-            }
-            result_index += 1;
+    pub fn on_close_project(&mut self) -> bool {
+        if is_promise_success() {
+            self.closed_step = self.closed_step.increase();
+            return true;
         }
 
-        self.is_closed = true;
+        return false;
     }
 
     pub fn internal_project_token_mint(&mut self, to: AccountId, amount: U128) -> Promise {
@@ -583,7 +602,6 @@ impl Contract {
                     .nft_batch_transfer(
                         to.clone(),
                         token_ids,
-                        None,
                         Some("".to_string()),
                     )
             }
