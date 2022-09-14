@@ -2186,16 +2186,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "proxy_token"
-version = "0.1.0"
-dependencies = [
- "near-contract-standards",
- "near-sdk",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "quote"
 version = "1.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"

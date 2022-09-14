@@ -8,9 +8,7 @@ use near_contract_standards::non_fungible_token::{Token, TokenId, refund_deposit
 use near_contract_standards::non_fungible_token::NonFungibleToken;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::{LazyOption, UnorderedSet};
-use near_sdk::{
-    env, near_bindgen, AccountId, BorshStorageKey, PanicOnDefault, Promise, PromiseOrValue, CryptoHash,
-};
+use near_sdk::{env, near_bindgen, AccountId, BorshStorageKey, PanicOnDefault, Promise, PromiseOrValue, CryptoHash, assert_one_yocto};
 use near_sdk::json_types::U128;
 
 #[near_bindgen]
@@ -157,6 +155,11 @@ impl Contract {
         refund_deposit_to_account(env::storage_usage() - initial_storage_usage, receiver_id);
 
         tokens
+    }
+
+    pub fn nft_batch_transfer(&mut self, to: AccountId, token_ids: Vec<TokenId>, approval_id: Option<u64>, memo: Option<String>) {
+        assert_one_yocto();
+        let sender_id = env::predecessor_account_id();
     }
 }
 

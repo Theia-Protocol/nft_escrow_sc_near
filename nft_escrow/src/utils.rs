@@ -84,10 +84,11 @@ pub trait SelfCallbacks {
         project_token_id: AccountId
     ) -> PromiseOrValue<bool>;
     fn on_buy(&mut self, from: AccountId, amount: U128, deposit: U128, reserve: U128) -> bool;
-    fn on_sell(&mut self, refund: U128, token_ids: Vec<TokenId>) -> bool;
-    fn on_convert(&mut self, amount: Balance);
+    fn on_sell(&mut self, from: AccountId, refund: U128, token_ids: Vec<TokenId>) -> bool;
+    fn on_convert(&mut self, from: AccountId, token_ids: Vec<TokenId>) -> bool;
     fn on_claim_fund(&mut self, amount: U128);
     fn on_close_project(&mut self);
+    fn pt_mint(&mut self, receiver_id: AccountId, amount: U128);
 }
 
 #[ext_contract(ext_nft_collection)]
