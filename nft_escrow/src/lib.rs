@@ -407,9 +407,9 @@ impl Contract {
 
         let convert_project_token;
         if self.closed_step >= ClosedStep::RemainProxy {
-           convert_project_token = self.internal_project_token_mint(env::predecessor_account_id(), U128::from(token_ids.len() as u128))
-        } else {
             convert_project_token = self.internal_convert_transfer(env::predecessor_account_id(), token_ids.len() as u128)
+        } else {
+            convert_project_token = self.internal_project_token_mint(env::predecessor_account_id(), U128::from(token_ids.len() as u128))
         };
 
         self.pt_burn(env::predecessor_account_id(), token_ids.clone());
@@ -567,6 +567,11 @@ impl Contract {
         if is_promise_success() {
             self.closed_step = self.closed_step.increase();
             return true;
+        }
+
+        if self.closed_step == ClosedStep::None {
+            let token_ids = (0..self.pre_mint_amount - 1).enumerate().map(|(_, token_id)| { token_id.to_string() }).collect();
+            self.revert_pt_burn(self.owner_id.clone(), token_ids);
         }
 
         return false;

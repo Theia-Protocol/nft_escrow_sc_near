@@ -145,9 +145,7 @@ impl Contract {
             .get(account_id)
         {
             Some(balance) => balance,
-            None => {
-                env::panic_str(format!("The account {} is not registered", account_id).as_str())
-            }
+            None => 0u128
         }
     }
 
