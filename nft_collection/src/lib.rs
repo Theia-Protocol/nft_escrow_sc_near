@@ -1,16 +1,13 @@
 mod owner;
 
 use std::collections::HashMap;
-
-use near_contract_standards::non_fungible_token::events::NftMint;
+use near_contract_standards::non_fungible_token::events::{NftMint, NftTransfer};
 use near_contract_standards::non_fungible_token::metadata::{NFTContractMetadata, TokenMetadata, NFT_METADATA_SPEC, NonFungibleTokenMetadataProvider};
 use near_contract_standards::non_fungible_token::{Token, TokenId, refund_deposit_to_account};
 use near_contract_standards::non_fungible_token::NonFungibleToken;
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::collections::{LazyOption, UnorderedSet};
-use near_sdk::{
-    env, near_bindgen, AccountId, BorshStorageKey, PanicOnDefault, Promise, PromiseOrValue, CryptoHash,
-};
+use near_sdk::{env, near_bindgen, AccountId, BorshStorageKey, PanicOnDefault, Promise, PromiseOrValue, CryptoHash, assert_one_yocto, require};
 use near_sdk::json_types::U128;
 
 #[near_bindgen]
@@ -157,6 +154,29 @@ impl Contract {
         refund_deposit_to_account(env::storage_usage() - initial_storage_usage, receiver_id);
 
         tokens
+    }
+
+    pub fn nft_batch_transfer(&mut self, to: AccountId, token_ids: Vec<TokenId>, memo: Option<String>) {
+        assert_one_yocto();
+        let sender_id = env::predecessor_account_id();
+
+        for token_id in &token_ids {
+            let owner_id =
+                self.tokens.owner_by_id.get(&token_id).unwrap_or_else(|| env::panic_str("Token not found"));
+            require!(&owner_id == &sender_id, "Only owner can do batch-transfer");
+            require!(&owner_id != &to, "Current and next owner must differ");
+
+            self.tokens.internal_transfer_unguarded(&token_id, &owner_id, &to);
+        }
+
+        let str_token_ids: Vec<_> = token_ids.iter().map(String::as_str).collect();
+        NftTransfer {
+            old_owner_id: &sender_id,
+            new_owner_id: &to,
+            token_ids: &str_token_ids,
+            authorized_id: None,
+            memo: memo.as_deref(),
+        }.emit();
     }
 }
 

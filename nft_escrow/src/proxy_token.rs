@@ -4,7 +4,9 @@ use crate::*;
 impl Contract {
     /// Mint nft tokens with amount belonging to `receiver_id`.
     /// caller should be owner
-    pub(crate) fn pt_mint(
+    #[private]
+    #[payable]
+    pub fn pt_mint(
         &mut self,
         receiver_id: AccountId,
         amount: U128,
@@ -47,13 +49,6 @@ impl Contract {
         refund_deposit_to_account(env::storage_usage() - initial_storage_usage, env::predecessor_account_id());
 
         self.pt_all_total_supply = self.pt_all_total_supply.checked_add(amount.0).unwrap();
-
-        PTMint {
-            owner_id: &receiver_id,
-            token_ids: &token_ids,
-            memo: None,
-        }
-            .emit();
     }
 
     /// Burn nft tokens from `from_id`.
@@ -85,13 +80,32 @@ impl Contract {
         });
 
         self.pt_all_total_supply = self.pt_all_total_supply.checked_sub(token_ids.len().try_into().unwrap()).unwrap();
+    }
 
-        PTBurn {
-            owner_id: &from_id,
-            token_ids: &token_ids,
-            memo: None,
-        }
-            .emit();
+    // revert burning proxy token
+    pub(crate) fn revert_pt_burn(
+        &mut self,
+        from_id: AccountId,
+        token_ids: Vec<TokenId>,
+    ) {
+        assert!(token_ids.len() > 0, "Invalid param");
+
+        token_ids.iter().enumerate().for_each(|(_, token_id)| {
+            let balance = self.internal_unwrap_balance_of(token_id, &from_id);
+            let mut balances = self.pt_balances_per_token.get(token_id).unwrap();
+            balances.insert(&from_id, &(balance + 1));
+            self.pt_total_supply.insert(
+                token_id,
+                &self
+                    .pt_total_supply
+                    .get(token_id)
+                    .unwrap()
+                    .checked_add(1)
+                    .unwrap_or_else(|| env::panic_str("Total supply overflow")),
+            );
+        });
+
+        self.pt_all_total_supply = self.pt_all_total_supply.checked_add(token_ids.len().try_into().unwrap()).unwrap();
     }
 
     pub fn pt_token(&self, token_id: TokenId) -> Option<Token> {
@@ -131,9 +145,7 @@ impl Contract {
             .get(account_id)
         {
             Some(balance) => balance,
-            None => {
-                env::panic_str(format!("The account {} is not registered", account_id).as_str())
-            }
+            None => 0u128
         }
     }
 

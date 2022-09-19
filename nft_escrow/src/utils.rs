@@ -1,5 +1,5 @@
 use near_contract_standards::non_fungible_token::TokenId;
-use near_sdk::{ext_contract, AccountId, Gas, Balance, PromiseOrValue, PromiseResult, env, require, Promise};
+use near_sdk::{ext_contract, AccountId, Gas, Balance, PromiseOrValue, env, require, Promise};
 use near_sdk::json_types::{U128};
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
 use near_sdk::serde::{Deserialize, Serialize};
@@ -33,6 +33,43 @@ pub enum CurveType {
     Sigmoidal,
 }
 
+#[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Clone, Debug)]
+pub enum ClosedStep {
+    None = 0,
+    PreMint = 1,
+    RemainProxy = 2,
+    TransferOwnership = 3
+}
+
+impl ClosedStep {
+    pub fn increase(&self) -> ClosedStep {
+        return match self {
+            ClosedStep::None => {
+                ClosedStep::PreMint
+            }
+            ClosedStep::PreMint => {
+                ClosedStep::RemainProxy
+            }
+            _ => {
+                ClosedStep::TransferOwnership
+            }
+        }
+    }
+
+    pub fn decrease(&self) -> ClosedStep {
+        return match self {
+            ClosedStep::TransferOwnership => {
+                ClosedStep::RemainProxy
+            }
+            ClosedStep::RemainProxy => {
+                ClosedStep::PreMint
+            }
+            _ => {
+                ClosedStep::None
+            }
+        }
+    }
+}
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, PartialEq, Clone, Debug)]
 #[serde(crate = "near_sdk::serde")]
@@ -84,10 +121,12 @@ pub trait SelfCallbacks {
         project_token_id: AccountId
     ) -> PromiseOrValue<bool>;
     fn on_buy(&mut self, from: AccountId, amount: U128, deposit: U128, reserve: U128) -> bool;
-    fn on_sell(&mut self, refund: U128, token_ids: Vec<TokenId>) -> bool;
-    fn on_convert(&mut self, amount: Balance);
+    fn on_sell(&mut self, from: AccountId, refund: U128, token_ids: Vec<TokenId>) -> bool;
+    fn on_convert(&mut self, from: AccountId, token_ids: Vec<TokenId>) -> bool;
     fn on_claim_fund(&mut self, amount: U128);
+    fn on_claim_finder_fee(&mut self, amount: U128);
     fn on_close_project(&mut self);
+    fn pt_mint(&mut self, receiver_id: AccountId, amount: U128);
 }
 
 #[ext_contract(ext_nft_collection)]
@@ -95,6 +134,7 @@ pub trait NonFungibleToken {
     fn new(&mut self, name: String, symbol: String, blank_uri: String, max_supply: U128);
     fn nft_mint(&mut self, receiver_id: AccountId, amount: U128);
     fn nft_transfer(&mut self, receiver_id: AccountId, token_id: TokenId, approval_id: Option<u64>, memo: Option<String>);
+    fn nft_batch_transfer(&mut self, to: AccountId, token_ids: Vec<TokenId>, memo: Option<String>);
     fn get_owner(&self) -> AccountId;
     fn set_owner(&mut self, owner_id: AccountId);
 }
@@ -122,14 +162,6 @@ pub fn integer_sqrt(value: U256) -> U256 {
         guess = (value / guess + guess) >> 1;
     }
     res
-}
-
-pub fn is_promise_ok(result: PromiseResult) -> bool {
-    match result {
-        PromiseResult::NotReady => unreachable!(),
-        PromiseResult::Successful(_) => true,
-        PromiseResult::Failed => env::panic_str("ERR_CALL_FAILED"),
-    }
 }
 
 pub fn refund_deposit_to_account(storage_used: u64, account_id: AccountId) {

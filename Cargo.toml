@@ -3,7 +3,6 @@ members = [
     "./nft_escrow",
     "./ft_token",
     "./nft_collection",
-    "./proxy_token",
 ]
 
 [profile.release]
