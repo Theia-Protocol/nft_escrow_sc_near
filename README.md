@@ -31,16 +31,7 @@ $ cd ..
 ```
 Compiles "Non Fungible Token" smart contract to a WebAssembly binary. The binary path is `./target/wasm32-unknown-unknown/release/nft_collection.wasm`.
 
-#### 3. Build Proxy Token  
-```
-$ cd proxy_token
-$ cargo install
-$ ./build.sh
-$ cd ..
-```
-Compiles "Proxy Token" smart contract to a WebAssembly binary. The binary path is `./target/wasm32-unknown-unknown/release/proxy_token.wasm`.
-
-#### 4. Build Escrow Smart Contract  
+#### 3. Build Escrow Smart Contract  
 ```
 $ cd nft_escrow
 $ cargo install
